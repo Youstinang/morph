@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20 and 21 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20, 21 and 22 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -35,6 +35,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 18 — Cinematic camera director (implemented; awaiting the end-of-run visual review).
 - Phase 20 — Research tools (implemented and validated).
 - Phase 21 — Explainability (implemented and validated).
+- Phase 22 — Flagship demo choreography (implemented; awaiting the end-of-run visual review).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -199,6 +200,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - The canonical record keeps "Why did MORPH change?" entries (`workspace.changes`, the latest 60). `applyMorphOperation` adds one whenever an accepted operation gives a reason and changes something that matters: opening, planning, replacing, moving, re-weighting or closing a station; replacing or setting aside a finding; the leaning and the answer; adding or re-weighing a path; confirming or rejecting an assumption. Each entry holds what changed in plain words (`src/state/changes.ts`), the reason, the cited evidence and assumption, who proposed it, and when. Deterministic, like every operation.
   - A reason may only cite evidence and assumptions the record has; an operation whose reason cites anything else is refused. A path update's own `why` (the path's text) is no longer passed on as an operation reason.
   - The HUD gets a "Why it changed (N)" button beside "Show steps" (one panel open at a time). Newest first, each entry shows the change, who gave the reason and the reason, the assumption it followed, and the findings it rests on (with the site for web-sourced ones). Stations opened, planned or closed together for the same reason read as one entry. Only outcome-level reasons are shown, never model reasoning. Hidden on phones, like the steps list.
+- 2026-10-07, Phase 22 (flagship choreography, timing only; the story, its order and its words are unchanged):
+  - Measured against the specification's 60-second timeline, the opening and ending matched but the middle ran 5–7 s late and squeezed the climax (the shift, the convergence and the answer within 5 s). Shorter pauses for Orion's demand and rules checks, Brix's station set-ups and Sage's estimate; Vex now walks to the cost station as soon as it opens and waits there for Sage's estimate (so the review follows the estimate without a long walk); Lume pauses a beat after the shift; the final agreement lasts 5 s.
+  - Story moments now: question 0.6 s, plan 5.1 s, first handoff 15 s, discovery 21 s, budget question 23 s, Costs 27 s, Risks 30 s, Vex's challenge 35 s, send-back 37 s, Options 39 s, three paths 42 s, re-check done 43 s, the shift 46 s, convergence 49 s, answer 54 s, end 56 s.
+  - Deferred to the visual review: the specification's delegation sends three agents out at once (two researchers and the analyst); MORPH has one researcher, so two agents leave at the plan. Sending a third (for example Vex to the rules station) would change who does what in the story.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -340,6 +345,9 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 22 choreography pass (2026-10-07):
+  - Typecheck, lint with zero warnings and all 186 tests pass unchanged (story order, every budget ending, determinism, camera shots in order).
+  - Chrome at 1440×900 at 8, 28, 36, 44, 48, 53 and 56 s: Vex hands Orion the doubt at 36 s; the camera closes on the paths as "Partner locally" pulls ahead at 48 s; the answer is centred at 56 s; 60 FPS. Previews: `p22-send-back.png`, `p22-shift.png`, `p22-answer.png`.
 - Phase 21 explainability pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 186 in 24 files. New tests: what is recorded and what is left out; reasons citing missing evidence or assumptions refused; the 60-entry cap; newest-first explanations with cited evidence and site; path text kept out of the event's reason; the full demo's eight explained changes in order (Brix's "Options" station after the challenged assumption, the answer with its evidence); a live question's answer, paths station and planned stations, each with the planner's own reason.
   - Chrome at 1440×900, demo at 57 s: the panel lists the answer, the leaning, the Options station after the assumption, the Costs and Risks stations and the plan, without covering the world's centre; no console errors. Preview: `p21-why-panel.png`.
@@ -439,7 +447,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 22 — Flagship demo choreography (authorized as part of the single run). The next architecture audit is due after about Phase 22.
+The architecture audit due after Phases 20–22, then Phase 23 — Performance and reliability (authorized as part of the single run).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
