@@ -43,3 +43,19 @@ test("the AI endpoints refuse requests from other sites before doing any work", 
   const step = await request.post("/api/agent-step", { data: {}, headers: { "sec-fetch-site": "cross-site" } });
   expect(step.status()).toBe(403);
 });
+
+test("each page offers what it is for", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Ask a question" })).toBeVisible();
+
+  await page.goto("/demo");
+  await expect(page.getByRole("button", { name: "Restart" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask a question" })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/showcase");
+  await expect(page.getByText("Should a European AI software company enter the UAE market?")).toBeVisible();
+  await expect(page.getByRole("toolbar")).toHaveCount(0);
+  const frame = await page.locator("main").boundingBox();
+  expect(frame && Math.round((frame.width / frame.height) * 9)).toBe(16);
+});

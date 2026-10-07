@@ -13,10 +13,13 @@ const mono = localFont({
   display: "swap",
 });
 
+const DESCRIPTION = "Watch six AI agents work through a decision question inside a living 3D command deck.";
+
 export const metadata: Metadata = {
   title: "MORPH",
-  description:
-    "A spatial intelligence environment built around your objective.",
+  description: DESCRIPTION,
+  openGraph: { title: "MORPH", description: DESCRIPTION, type: "website" },
+  twitter: { card: "summary_large_image", title: "MORPH", description: DESCRIPTION },
 };
 
 export default function RootLayout({

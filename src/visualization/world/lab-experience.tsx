@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { WorkspaceProvider } from "@/state/react";
 import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
@@ -34,7 +34,16 @@ let webglSupport: boolean | undefined;
 const neverChanges = () => () => {};
 const readWebglSupport = () => (webglSupport ??= webglAvailable());
 
-export function LabExperience({ createSession }: { createSession: () => LabSession }) {
+/**
+ * full: the demo plus "Ask a question". demo: the offline story only. showcase: the story in a 16:9 frame
+ * for recording, without toolbar or panel buttons; Space pauses, R restarts, S toggles sound.
+ */
+export type ExperienceVariant = "full" | "demo" | "showcase";
+
+const isTyping = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+export function LabExperience({ createSession, variant = "full" }: { createSession: () => LabSession; variant?: ExperienceVariant }) {
   const [session] = useState(createSession);
   const worldRef = useRef<World>(session.world);
   const tags = useRef<TagRegistry>({});
@@ -73,6 +82,20 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
     handleSnapshot(session.world);
     setPaused(false);
   }, [session, handleSnapshot]);
+  const toggleSound = sound.toggle;
+  useEffect(() => {
+    if (variant !== "showcase") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        setPaused((value) => !value);
+      } else if (event.key === "r" || event.key === "R") restart();
+      else if (event.key === "s" || event.key === "S") toggleSound();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [variant, restart, toggleSound]);
   const ask = useCallback(
     (objective: string) => {
       session.startLive(objective);
@@ -87,7 +110,10 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
   return (
     <WorkspaceProvider store={session.store}>
       <ReducedMotionContext.Provider value={reducedMotion}>
-        <main className={`lab-root ${labels ? "" : "lab-root--no-labels"}`} style={HUD_CSS_VARS}>
+        <main
+          className={`lab-root ${labels ? "" : "lab-root--no-labels"} ${variant === "showcase" ? "lab-root--showcase" : ""}`}
+          style={HUD_CSS_VARS}
+        >
           <div className="lab-canvas">
             {canDraw && problem === null ? (
               <SceneBoundary key={viewKey} onFail={crashed}>
@@ -151,6 +177,8 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
             onSelect={setSelected}
             onAsk={ask}
             onBackToDemo={restart}
+            canAsk={variant === "full"}
+            clean={variant === "showcase"}
             inputAnchor={inputAnchor}
             onAnswer={(requestId, value) => {
               session.answerInput(requestId, value);

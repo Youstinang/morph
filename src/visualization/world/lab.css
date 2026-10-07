@@ -4,6 +4,13 @@
   overflow: hidden;
   background: #05070a;
 }
+/* Recording mode: the largest 16:9 frame that fits, centred, with black bars. */
+.lab-root--showcase {
+  margin: auto;
+  width: min(100vw, calc(100svh * 16 / 9));
+  height: min(100svh, calc(100vw * 9 / 16));
+  outline: 100vmax solid #000;
+}
 .lab-canvas {
   position: absolute;
   inset: 0;
@@ -810,6 +817,12 @@
 }
 .lab-root--no-labels .agent-tags {
   display: none;
+}
+
+@media (max-width: 1599px) {
+  .lab-root--showcase .lab-team {
+    justify-content: center;
+  }
 }
 
 @media (min-width: 1600px) {

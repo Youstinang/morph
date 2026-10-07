@@ -48,6 +48,10 @@ interface LabHudProps {
   inputAnchor: Ref<HTMLElement>;
   onAsk: (objective: string) => void;
   onBackToDemo: () => void;
+  /** Whether the visitor can ask their own question (live AI). */
+  canAsk: boolean;
+  /** Recording mode: no toolbar or panel buttons, only what tells the story. */
+  clean: boolean;
 }
 
 const SHOW_COST = process.env.NODE_ENV !== "production";
@@ -107,8 +111,8 @@ export function LabHud(props: LabHudProps) {
           <span className="lab-core">
             <span className="status-dot" /> {CORE_WORDS[snapshot.core]}
           </span>
-          {live && <span className="lab-objective__mode">Live AI</span>}
-          {SHOW_COST && live && cost.modelCalls > 0 && (
+          {live && !props.clean && <span className="lab-objective__mode">Live AI</span>}
+          {SHOW_COST && live && !props.clean && cost.modelCalls > 0 && (
             <span className="lab-cost">
               AI cost ≈ ${cost.estimatedUsd.toFixed(4)} · {cost.modelCalls} call{cost.modelCalls === 1 ? "" : "s"} (dev only)
             </span>
@@ -139,58 +143,60 @@ export function LabHud(props: LabHudProps) {
             {objective ? objective.text : "\u00a0"}
           </p>
         )}
-        <div className="lab-controls" role="toolbar" aria-label="Demo controls">
-          {!asking && (
-            <button type="button" className="lab-btn lab-btn--ask" onClick={() => setAsking(true)}>
-              Ask a question
+        {!props.clean && (
+          <div className="lab-controls" role="toolbar" aria-label="Demo controls">
+            {!asking && props.canAsk && (
+              <button type="button" className="lab-btn lab-btn--ask" onClick={() => setAsking(true)}>
+                Ask a question
+              </button>
+            )}
+            <button type="button" className="lab-btn" onClick={props.onTogglePause}>
+              {props.paused ? "Resume" : "Pause"}
             </button>
-          )}
-          <button type="button" className="lab-btn" onClick={props.onTogglePause}>
-            {props.paused ? "Resume" : "Pause"}
-          </button>
-          <button type="button" className="lab-btn" onClick={live ? props.onBackToDemo : props.onRestart}>
-            {live ? "Back to demo" : "Restart"}
-          </button>
-          <button type="button" className="lab-btn" onClick={props.onSpeed} aria-label={`Playback speed ${props.speed}x`}>
-            {props.speed}×
-          </button>
-          <button type="button" className="lab-btn" onClick={props.onToggleLabels} aria-pressed={props.labels}>
-            Names
-          </button>
-          {props.onToggleCamera && (
+            <button type="button" className="lab-btn" onClick={live ? props.onBackToDemo : props.onRestart}>
+              {live ? "Back to demo" : "Restart"}
+            </button>
+            <button type="button" className="lab-btn" onClick={props.onSpeed} aria-label={`Playback speed ${props.speed}x`}>
+              {props.speed}×
+            </button>
+            <button type="button" className="lab-btn" onClick={props.onToggleLabels} aria-pressed={props.labels}>
+              Names
+            </button>
+            {props.onToggleCamera && (
+              <button
+                type="button"
+                className="lab-btn"
+                onClick={props.onToggleCamera}
+                aria-pressed={props.autoCamera}
+                title={props.autoCamera ? "The camera moves gently for big moments; drag to look around" : "The camera stays where you put it"}
+              >
+                {props.autoCamera ? "Camera: auto" : "Camera: still"}
+              </button>
+            )}
             <button
               type="button"
               className="lab-btn"
-              onClick={props.onToggleCamera}
-              aria-pressed={props.autoCamera}
-              title={props.autoCamera ? "The camera moves gently for big moments; drag to look around" : "The camera stays where you put it"}
+              onClick={props.onToggleSound}
+              aria-pressed={props.sound}
+              title="Soft sounds for key moments. Everything they mark is also on screen."
             >
-              {props.autoCamera ? "Camera: auto" : "Camera: still"}
+              {props.sound ? "Sound: on" : "Sound: off"}
             </button>
-          )}
-          <button
-            type="button"
-            className="lab-btn"
-            onClick={props.onToggleSound}
-            aria-pressed={props.sound}
-            title="Soft sounds for key moments. Everything they mark is also on screen."
-          >
-            {props.sound ? "Sound: on" : "Sound: off"}
-          </button>
-          <button
-            type="button"
-            className="lab-btn"
-            onClick={props.onToggleQuality}
-            title={
-              props.qualityLowered
-                ? "Picture quality, lowered automatically because the picture was slow. Click to choose one yourself."
-                : "Picture quality. Click to change it."
-            }
-          >
-            {QUALITY_WORDS[props.quality]}
-            {props.qualityLowered ? " (auto)" : ""}
-          </button>
-        </div>
+            <button
+              type="button"
+              className="lab-btn"
+              onClick={props.onToggleQuality}
+              title={
+                props.qualityLowered
+                  ? "Picture quality, lowered automatically because the picture was slow. Click to choose one yourself."
+                  : "Picture quality. Click to change it."
+              }
+            >
+              {QUALITY_WORDS[props.quality]}
+              {props.qualityLowered ? " (auto)" : ""}
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="lab-team">
@@ -216,44 +222,46 @@ export function LabHud(props: LabHudProps) {
             );
           })}
         </nav>
-        <section className={`lab-steps ${panel ? "lab-steps--open" : ""}`} aria-label="Step by step">
-          <div className="lab-steps__buttons">
-            <button type="button" className="lab-btn" aria-expanded={panel === "steps"} onClick={() => toggle("steps")}>
-              {panel === "steps" ? "Hide steps" : "Show steps"}
-            </button>
-            <button type="button" className="lab-btn" aria-expanded={panel === "why"} onClick={() => toggle("why")} disabled={explained.length === 0}>
-              Why it changed{explained.length > 0 ? ` (${explained.length})` : ""}
-            </button>
-          </div>
-          {panel === "steps" && (
-            <ol>
-              {snapshot.log.map((entry) => (
-                <li key={entry.id}>
-                  <span className="lab-caption__dot" style={{ background: speakerColor(entry) }} />
-                  {entry.text}
-                </li>
-              ))}
-            </ol>
-          )}
-          {panel === "why" && (
-            <ol className="lab-why" aria-label="Why did MORPH change?">
-              {explained.map((line) => (
-                <li key={line.key}>
-                  <p className="lab-why__change">{line.change}</p>
-                  <p className="lab-why__reason">
-                    <span>{line.by}:</span> {line.reason}
-                  </p>
-                  {line.assumption && <p className="lab-why__basis">After the assumption: {line.assumption}</p>}
-                  {line.basis.length > 0 && (
-                    <p className="lab-why__basis">
-                      Based on: {line.basis.map((item) => `${item.text}${item.site ? ` (${item.site})` : ""}`).join(" · ")}
+        {!props.clean && (
+          <section className={`lab-steps ${panel ? "lab-steps--open" : ""}`} aria-label="Step by step">
+            <div className="lab-steps__buttons">
+              <button type="button" className="lab-btn" aria-expanded={panel === "steps"} onClick={() => toggle("steps")}>
+                {panel === "steps" ? "Hide steps" : "Show steps"}
+              </button>
+              <button type="button" className="lab-btn" aria-expanded={panel === "why"} onClick={() => toggle("why")} disabled={explained.length === 0}>
+                Why it changed{explained.length > 0 ? ` (${explained.length})` : ""}
+              </button>
+            </div>
+            {panel === "steps" && (
+              <ol>
+                {snapshot.log.map((entry) => (
+                  <li key={entry.id}>
+                    <span className="lab-caption__dot" style={{ background: speakerColor(entry) }} />
+                    {entry.text}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {panel === "why" && (
+              <ol className="lab-why" aria-label="Why did MORPH change?">
+                {explained.map((line) => (
+                  <li key={line.key}>
+                    <p className="lab-why__change">{line.change}</p>
+                    <p className="lab-why__reason">
+                      <span>{line.by}:</span> {line.reason}
                     </p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+                    {line.assumption && <p className="lab-why__basis">After the assumption: {line.assumption}</p>}
+                    {line.basis.length > 0 && (
+                      <p className="lab-why__basis">
+                        Based on: {line.basis.map((item) => `${item.text}${item.site ? ` (${item.site})` : ""}`).join(" · ")}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
       </div>
 
       <div className="lab-info">

@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20, 21, 22, 23, 24 and 25 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20, 21, 22, 23, 24, 25 and 26 are implemented (Phase 26 short of publishing, which waits for the user) and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -39,6 +39,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 — Performance and reliability (implemented and validated).
 - Phase 24 — Security and tests (implemented and validated).
 - Phase 25 — Visual polish and subtle sound (implemented; awaiting the end-of-run visual review).
+- Phase 26 — Showcase and deployment (implemented locally; publishing awaits the user's go-ahead and a deployment decision).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -148,7 +149,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - `src/orchestration/run-controller.ts` (new): owns the bus, store, gate, clock and mode; one runtime at a time; fixed 1/60 s steps through `advance(realSeconds, speed)`, counting at most 0.1 s per frame (the scene used to keep this counter); the demo loop; stages attach with `onCycle`, `beforeStep` and `afterStep`. Without a planner connected, a live question fails with "live AI isn't connected here".
   - `src/orchestration/demo/runtime.ts` (was `sim/runner.ts`) and `demo/script.ts` (the agents' parts, was in `sim/script.ts`). `src/orchestration/live-question.ts` (was `sim/live-runner.ts`) and `plan-client.ts` (was in the visualization folder).
   - `src/visualization/world/sim/session.ts` now only attaches the world to a run (`attachWorld`) and declares the `LabSession` the screen drives; it imports nothing from orchestration. `sim/presentation.ts` keeps the station look registry.
-  - `src/app/lab/lab-session.ts` and `lab-client.tsx` wire the two for `/lab`; `LabExperience` receives a session factory.
+  - `src/app/lab/lab-session.ts` wires the two; `src/app/morph-client.tsx` hands the session factory to `LabExperience` for `/`, `/demo`, `/showcase` and `/lab` (Phase 26).
   - Audit fix: the standing team moved from the demo fixture to `src/state/team.ts`, so live questions no longer borrow it from demo data.
   - Run-level tests moved to `src/app/lab/` (`demo-run`, `workspace-run`, `live-run`), because they need both layers; world-only tests stay in `sim/world.test.ts`.
 - 2026-10-07, Phase 14: the user chose:
@@ -220,6 +221,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Sound is synthesized in the browser with the Web Audio API: no sound files, no new dependency. `src/visualization/world/sound/cues.ts` maps seven real events to cues: the question arriving (`objective_received`), a task handed out, a handoff landing, a station opening, an assumption challenged, a path re-weighed, and the answer. A burst of the same event sounds once (0.7 s apart) and cues never stack (0.15 s apart); the demo makes 10 sounds in 56 s. `synth.ts` plays a few soft notes in D major, under two seconds, at low volume, through a filter and a limiter.
   - Muted by default. The toolbar's "Sound: off/on" button creates the audio engine on the first click (browsers require a click before sound). Nothing plays while the tab is hidden. Every sound marks something already on screen. The button is hidden on phones, like the other secondary controls.
   - Header polish: the wordmark column has a fixed width, so the question no longer slides sideways as the status line changes; on laptop widths (under 1280 px) the toolbar is more compact, so the full question fits on two lines instead of being cut off.
+- 2026-10-07, Phase 26 (showcase and deployment):
+  - The specification's routes: `/` is the main experience (the demo plays, and "Ask a question" runs live AI); `/demo` is the offline story only; `/showcase` is the recording mode; `/lab` stays as the internal view. The Phase 1 placeholder home page is gone. One component, `LabExperience`, serves all four through `variant` (`full`, `demo`, `showcase`).
+  - `/showcase`: the largest 16:9 frame that fits the window, centred, with black bars; no toolbar and no panel buttons (the question, status, captions, findings, team bar and answer stay). Keyboard: Space pauses, R restarts, S toggles sound. Automatic camera and names are on.
+  - Link previews: `src/app/opengraph-image.jpg` (1200×630, captured from the production showcase at 30 s), alt text, and Open Graph / Twitter titles and description in the root layout.
+  - Deployment readiness (Vercel, as chosen): no Vercel config is needed for Next.js; the only secret is `OPENAI_API_KEY` (optional `MORPH_PLANNER_MODEL`, `MORPH_WEB_SEARCH`), set as a Vercel environment variable, never `NEXT_PUBLIC_`. Rate limits trust Vercel's address headers automatically (`VERCEL=1`). Not yet published: the Vercel CLI isn't installed and the Vercel connection isn't signed in.
+  - Deployment risk found (decision for the user): a live question's record (plan, findings, spending) is kept in one server process's memory (`run-registry.ts`). On Vercel the AI routes can run in separate, short-lived instances, so later steps may not find the question and live AI would fail with "this question has expired". The offline demo is unaffected.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -361,6 +368,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 26 showcase pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 197 in 27 files (the placeholder page's test was removed with it); 3 end-to-end tests pass on a production build. New end-to-end test: `/` offers "Ask a question", `/demo` has the controls without it, and `/showcase` shows the question with no toolbar in an exact 16:9 frame.
+  - Chrome: `/`, `/demo` and `/showcase` load with no page errors; `/showcase` at 1920×1080 fills the screen, at 1440×1000 shows a 1440×810 frame with bars; Space pauses; 60 FPS. Found and fixed: with the panel buttons hidden, the team bar sat off to the left (now centred). Previews: `p26-showcase-letterbox.png`, `p26-showcase-paths.png`.
+  - Found and fixed: the dev server had written a garbled generated types file while pages were being added, which broke the typecheck and build; restarting it regenerated the file.
+  - Production build passes (with `/opengraph-image.jpg`); neither key appears in `.next/static`; `.env.local` is still git-ignored.
 - Phase 25 visual polish and sound pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 198 in 28 files; both end-to-end tests pass on a production build. New tests: only key moments map to sounds; bursts sound once and cues never stack; the full demo sounds the question first and the answer last, includes the challenge and the shift, and stays at 14 sounds or fewer.
   - Chrome: no notes while muted; after "Sound: off" is clicked at 3 s, the station opening (5 s) and the handoff (15 s) play; no notes after muting again; no page errors.
@@ -498,7 +510,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-Phase 26 — Showcase and deployment (authorized as part of the single run; ask the user right before publishing).
+None until the user decides: the end-of-run visual review (Phases 17, 18, 22, 25 and 26), how live AI should work once published, and the go-ahead to publish on Vercel.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

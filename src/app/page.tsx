@@ -1,5 +1,5 @@
-import { LandingShell } from "@/visualization/landing-shell";
+import { MorphClient } from "./morph-client";
 
 export default function Home() {
-  return <LandingShell />;
+  return <MorphClient variant="full" />;
 }
