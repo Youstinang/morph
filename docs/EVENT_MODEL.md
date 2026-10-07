@@ -111,8 +111,9 @@ A `MorphOperation` (`src/state/operations.ts`) is a proposed change to the canon
 | Modules | `add_module` (optionally `reserve`), `update_module`, `move_module`, `resize_module`, `emphasize_module`, `deemphasize_module`, `remove_module` |
 | Evidence and assumptions | `add_evidence`, `remove_evidence` (optionally superseded by another item), `add_assumption`, `challenge_assumption`, `update_assumption` |
 | Scenarios and answer | `add_scenario`, `update_scenario`, `update_recommendation` |
-| Explained changes | Any accepted operation with a reason that changes something that matters adds an entry to `workspace.changes` (what changed, the reason, cited evidence and assumption, who, when); reasons may only cite evidence and assumptions in the record |
 | People and view | `request_human_input`, `answer_human_input`, `skip_human_input`, `assign_agent`, `focus_camera` |
+
+Explained changes (Phase 21): any accepted operation with a reason that changes something that matters adds an entry to `workspace.changes` (what changed, the reason, the cited evidence and assumption, who proposed it, when). A reason may only cite evidence and assumptions in the record.
 
 Every operation has an `id`, a `source` (provenance: user, demo, orchestrator or model, with an optional agent and label) and an optional `why` (reason, evidence ids, assumption, agent). `applyMorphOperation(workspace, input)` is pure and deterministic. It returns the new workspace or a refusal with a reason, and a refusal leaves the workspace untouched. It refuses:
 
