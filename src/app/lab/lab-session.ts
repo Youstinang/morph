@@ -1,4 +1,4 @@
-import { requestPlan as askServer } from "@/orchestration/plan-client";
+import { requestPlan, requestStep } from "@/orchestration/plan-client";
 import { createRunController, type RunController, type RunControllerOptions } from "@/orchestration/run-controller";
 import { attachWorld, type LabSession } from "@/visualization/world/sim/session";
 
@@ -7,7 +7,7 @@ export interface LabRun extends LabSession {
 }
 
 /** Wires the lab: the run controller (orchestration) with the 3D world attached (visualization). */
-export function createLabSession(options: RunControllerOptions = { requestPlan: askServer }): LabRun {
+export function createLabSession(options: RunControllerOptions = { requestPlan, requestStep }): LabRun {
   const run = createRunController(options);
   const view = attachWorld(run);
   return {

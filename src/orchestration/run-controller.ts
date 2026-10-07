@@ -5,7 +5,7 @@ import { createOperationGate, type OperationGate } from "@/state/gate";
 import { createLiveWorkspace } from "@/state/plan";
 import { createWorkspaceStore, type WorkspaceStore } from "@/state/store";
 import { createDemoRuntime, type DemoRuntime } from "./demo/runtime";
-import { createLiveQuestion, type LiveQuestion, type PlanRequester } from "./live-question";
+import { createLiveQuestion, type LiveQuestion, type PlanRequester, type StepRequester } from "./live-question";
 
 /** The run clock's fixed step. Every run advances in these steps, whatever the display's frame rate. */
 export const FIXED_STEP = 1 / 60;
@@ -53,6 +53,8 @@ export interface RunController {
 export interface RunControllerOptions {
   /** How live questions reach the planner; without it, live questions fail with a plain reason. */
   requestPlan?: PlanRequester;
+  /** How the team's later steps reach the server; without it, the team waits at its stations after planning. */
+  requestStep?: StepRequester;
 }
 
 const notConnected: PlanRequester = async () => ({ ok: false, reason: "live AI isn't connected here" });
@@ -142,7 +144,7 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
     startLive(objective) {
       clear("real");
       begin();
-      live = createLiveQuestion(bus, gate, () => time, cycle, objective, requestPlan);
+      live = createLiveQuestion(bus, gate, () => time, cycle, objective, requestPlan, options.requestStep);
     },
     answerBudget: () => (live ? false : demo.answer("budget", "user")),
     attach(stage) {

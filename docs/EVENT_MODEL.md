@@ -126,6 +126,16 @@ Text stays text: the HUD renders it as plain strings, never as HTML.
 
 **Live questions (planner).** The objective planner's reply is not an operation list: it is a `Plan` (`src/state/plan.ts`: interpretation, 2–6 stations, at most one task per agent, up to 2 assumptions and 2 questions), validated on the server and again in the browser. `planToOperations` turns it into ordinary `add_module`, `add_assumption`, `request_human_input` and `assign_agent` operations with ids MORPH assigns, proposed through the gate as `{ kind: "model", label: "Planner", agentId: "nova" }`. Each station's `why` is the planner's one-line reason. The user's question is recorded as `set_objective` from the user.
 
+**Live questions (team work, Phase 14).** When the plan reply carries a `runId`, the live question schedules research (one task per planned assignment, starting when the agent has arrived), a critique (after any research succeeds, when Vex is at the Core) and a synthesis (after the critique settles, when Lume is at the Core). Each step is a `POST /api/agent-step` with `{ runId, step }`, where `step` is `{ kind: "research", task }`, `{ kind: "critique" }` or `{ kind: "synthesis" }` (`src/state/live-work.ts`); replies are validated again in the browser. Events per step:
+
+- started: `agent_work_started` (or `retry_started` for a second attempt); synthesis also publishes `agent_collaboration_started` and `synthesis_started` for Lume and Nova.
+- research succeeded: `add_evidence` (source `{ kind: "model", label: "AI general knowledge, not checked against sources", verified: false }`) and `update_module` (the station's headline), proposed as `{ kind: "model", label: "Researcher", agentId }`, then `task_completed`.
+- critique succeeded: `challenge_assumption`, or `add_evidence` of kind risk for a doubted finding, as the Critic; or `task_completed` "found no serious weak spot".
+- synthesis succeeded: `update_recommendation` (final, citing the findings it rests on) as the Synthesizer, `update_objective` answered, `synthesis_completed`, `task_completed` for Lume and Nova.
+- failed: `task_failed` with the short reason; skipped: `agent_waiting`.
+- every reply's cost: `model_call_completed` with purpose `research`, `critique` or `synthesis`.
+- the end: everyone `agent_assigned` home and `agent_idle`; if the team couldn't answer, first `run_waiting` "The team stopped: {reason}.".
+
 The operation gate (`src/state/gate.ts`) is the only caller in a run. `gate.submit(input, { as, summary })` stamps the trusted channel's provenance (`as`) over whatever source the proposal claims, applies the operation to the store, and publishes either its record events carrying the operation reference, or `operation_rejected` with the reason. The world reacts only to those published record events, so it never shows a refused change. The development-only page `/dev/operations` sends good and deliberately broken requests through a real gate.
 
 ## Demo timeline

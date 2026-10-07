@@ -65,7 +65,8 @@ export type PlanUsage = z.infer<typeof PlanUsageSchema>;
 
 /** What `/api/plan` returns. Reasons are short and safe to show; they never contain secrets. */
 export const PlanResponseSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), plan: PlanSchema, usage: PlanUsageSchema }),
+  /** `runId` names the server's record of this question, for the team's later steps. */
+  z.object({ ok: z.literal(true), plan: PlanSchema, usage: PlanUsageSchema, runId: z.string().regex(/^[\w-]{8,64}$/).optional() }),
   z.object({ ok: z.literal(false), reason: Text(200), usage: PlanUsageSchema.optional() }),
 ]);
 export type PlanResponse = z.infer<typeof PlanResponseSchema>;

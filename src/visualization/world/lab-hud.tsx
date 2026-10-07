@@ -203,7 +203,7 @@ export function LabHud(props: LabHudProps) {
         {(findings.length > 0 || scenarios.length > 0 || questions.length > 0) && (
           <section className="lab-findings" aria-label="What we know so far">
             <div className="lab-findings__list">
-              <p className="section-label">{live ? "What the plan assumes" : "What we know so far"}</p>
+              <p className="section-label">{!live ? "What we know so far" : evidence.length > 0 ? "What the team thinks · AI knowledge, not checked" : "What the plan assumes"}</p>
               <ul>
                 {findings.map((finding) => (
                   <li key={finding.key} data-kind={finding.kind}>
@@ -243,7 +243,9 @@ export function LabHud(props: LabHudProps) {
         {answer && (
           <section className="lab-recommendation" aria-label="Recommendation">
             <p className="section-label">
-              Our answer · {answer.confidence} confidence{mode === "demo" ? " · demo data, not live research" : ""}
+              {live
+                ? `Tentative answer · ${answer.confidence} confidence · AI general knowledge, not research`
+                : `Our answer · ${answer.confidence} confidence · demo data, not live research`}
             </p>
             <h2>{answer.statement}</h2>
             <p>{answer.reason}</p>

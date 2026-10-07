@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 13 — Deterministic demo runtime (authorized 2026-10-07: "do what is needed then shift to next phase"); complete, no visual checkpoint
+Phase 14 — Agent orchestration (authorized 2026-10-07: "go for it"); complete, no visual checkpoint
 
 ## Status
-Complete — Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -28,6 +28,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 12 — World morphing engine: glide, carry, replacement, morph sweep, calm mode, and the `/dev/modules` operation sandbox.
 - Phase 19 (moved forward) — Objective planner / real AI provider: "Ask a question" on `/lab` plans the user's own question with a real model and acts the plan out on the deck.
 - Phase 13 — Deterministic demo runtime: the run controller, demo runtime and live question run live in `src/orchestration` on a fixed-step clock; the 3D world attaches to the run.
+- Phase 14 — Agent orchestration: after planning, live questions continue. Agents work their tasks two at a time with model calls, Vex challenges the weakest point, and Lume and Nova give a labelled tentative answer, all within per-question limits enforced by the server.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -140,6 +141,16 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - `src/app/lab/lab-session.ts` and `lab-client.tsx` wire the two for `/lab`; `LabExperience` receives a session factory.
   - Audit fix: the standing team moved from the demo fixture to `src/state/team.ts`, so live questions no longer borrow it from demo data.
   - Run-level tests moved to `src/app/lab/` (`demo-run`, `workspace-run`, `live-run`), because they need both layers; world-only tests stay in `sim/world.test.ts`.
+- 2026-10-07, Phase 14: the user chose:
+  - what the team does: **AI-only work, clearly labelled, ending in a tentative answer, under 1 cent per question**;
+  - where it is coordinated: **in the browser, with the server making each AI call and enforcing the limits**;
+  - the limits: **the recommended ones: 2 agents at once, 30 s per task, 1 retry, 10 AI calls and a USD 0.01 hard stop per question** (`LIVE_LIMITS` in `src/state/live-work.ts`).
+  - The steps: one research call per planned task; one critique (Vex), who challenges a plan assumption or a finding, or finds no weak spot; one synthesis (Lume with Nova), giving a statement, a reason, low or moderate confidence and the findings it rests on. Each is one structured call with strict JSON output (`src/orchestration/agent-steps.ts`), validated with Zod; Vex may only name things that exist, and the answer's basis is cut to real findings.
+  - With no research tools yet, prompts forbid invented statistics, prices, sources and recent events, and treat the question and notes as quoted data. Every finding is recorded as model evidence labelled "AI general knowledge, not checked against sources", never verified. The answer card says "Tentative answer · {confidence} confidence · AI general knowledge, not research".
+  - The browser only names a step (`research` with a task number, `critique` or `synthesis`) and the question's run id. The server keeps each question's record (`src/server/run-registry.ts`: plan, findings, critique, calls, spending and attempts; in memory, 15-minute expiry, at most 500 questions), builds every prompt from that record, and refuses steps beyond the limits, out of order or already done. Calls in flight count toward the call limit, so parallel requests can't overrun it. The plan's call counts too. New route `/api/agent-step` (60 steps per minute per client, 600 per hour per server process).
+  - The browser's scheduler (`src/orchestration/scheduler.ts`) handles dependencies, two at a time, timeouts on the run clock, one retry after 1.5 s, and the attempt cap. A task starts only when its agent has arrived. The review waits for any finding and the answer waits for the review, so if every task fails the team stops without them. The whole question also stops after 150 s.
+  - On screen, every state is a real step: working while its call runs; "stuck … trying again shortly" then retrying; Vex walks to the Core to review; Lume walks there and collaborates with Nova; the answer, then everyone walks home. A stop at a limit shows "The team stopped: {reason}" with the Core on hold, and the team goes home.
+  - No new dependency.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -246,6 +257,15 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Runtime tests (`src/orchestration/run-controller.test.ts`), with a stand-in that reports walks and handoffs instead of the 3D world: the whole story plays to the final answer under 90 s with no world and no network (a stubbed `fetch` is never called), zero refusals, zero bus rejections or listener errors, no model provenance and zero cost; with nothing reporting arrivals the story holds at Nova's first walk instead of faking progress; the first 40 s are event-for-event identical at 30, 60 and 144 frames per second, at 2× speed and with irregular frames; a stalled frame counts at most 0.1 s; a restart and the automatic loop replay the identical story; every scripted story moment exists in the timeline; a live question with no planner fails plainly.
   - Chrome at 1440×900: `/lab` demo at 16 s, 27 s, 44 s and 62 s unchanged from the approved screens, 60 FPS, no console errors (only the three.js `Clock` notice). A live question through the new wiring: real plan, about USD 0.0006, agents waiting at their stations, 60 FPS, no errors. `/dev/modules`, `/dev/operations`, `/dev/models` and `/` load.
   - Previews: `runtime-demo-44s.png`, `runtime-demo-62s.png`, `runtime-live-15s.png`.
+- Phase 14 agent orchestration pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass (`/api/agent-step` is a dynamic route). Tests: 148 in 20 files (22 new).
+  - Scheduler tests: dependencies, two at a time, timeouts on the run clock that ignore late replies, a retry after its delay, no retry for a final failure, skipping once the attempt cap is reached, "any" dependencies, and cancellation.
+  - Step tests: prompts carry the ground rules and quote the question; Vex can't name something that doesn't exist; the answer's basis is cut to real findings; extra or oversized fields are refused.
+  - Route tests (fake provider): prompts are built from the server's record, never the browser's text; unreadable bodies, extra fields, unknown steps, unknown questions (404), steps out of order and tasks outside the plan are refused without a model call; one retry, then refused; a finished task can't be redone; the call limit and the spending limit stop the question, counting the plan; three parallel requests at 8 of 10 calls give exactly two calls; questions expire.
+  - Live-run tests (fake server answering on the run clock): the full flow from research to review to tentative answer to everyone at home; never more than two calls or two working agents at once; all evidence is unverified model evidence; Vex's challenge is recorded; the answer cites the right findings; the question is answered; zero refusals. Also: a failure is visible before the retry; Vex is still sent to review when his own research finishes last; a limit stop shows the reason and sends everyone home; no review or answer when all research fails; "Back to demo" cancels work in flight.
+  - Found and fixed in the live check: the late "done; waiting for the team" status stopped Vex's walk to the Core when his research finished last, so the review never started; the regression test above covers it. Also found by tests: a failed agent showed "waiting" in the same frame, so the failure was never visible.
+  - Real model in Chrome at 1440×900 and 390×844: the bakery question ran to a tentative answer in about 30 s with 8 calls (plan, five research, review, answer) for about USD 0.0023; 60 FPS, no console errors. The production build contains neither key.
+  - Previews: `live-work-review.png`, `live-work-answer.png`, `live-work-home.png`, `live-work-phone.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -261,10 +281,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - A carried station is small (half size) and seen from above in the default view, so the lift reads less strongly than in close views.
 - Overlap-free motion is tested for random reshuffles; a pile-up of many interruptions within a fraction of a second has no guarantee beyond those tests.
 - The OpenAI and Anthropic keys pasted in chat must be revoked and replaced in `.env.local`.
-- Live questions stop after planning: agents wait at their stations because research tools (Phase 20) and live orchestration (Phase 14) aren't built yet. Nova's questions can't be answered yet (Phase 16).
-- Live mode never ends on its own; "Back to demo" or a new question leaves it.
+- Live findings are the model's general knowledge, not research: there are no search or source tools yet (Phase 20). They are labelled and never verified. Nova's questions can't be answered yet (Phase 16), so the answer can't use them.
+- Each question's record lives in one server process's memory: a restart, or a second server instance, forgets it, and the next step gets "this question has expired; ask it again" (shared storage would come with hosting, Phase 26).
+- An agent with two tasks in one plan isn't possible (the planner tidies it away), so the scheduler doesn't handle one agent at two stations.
+- Once answered, live mode stays on screen; "Back to demo" or a new question leaves it.
 - Rate limits and the hourly cap are per server process and reset on restart; a multi-instance deployment needs a shared limit (Phase 26).
-- Station panels in live mode show "Looking into it…", because nothing has been researched.
+- Station panels in live mode show "Looking into it…" until that station's finding arrives.
+- `/api/agent-step` has the same open `X-Forwarded-For` and content-type weaknesses as `/api/plan` (Phase 24); each question's own limits still cap a single question at USD 0.01.
 - Plan quality depends on the model; it is a proposal for what to investigate, never evidence.
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
@@ -302,12 +325,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Dependencies: none added since Phase 9; production audit clean. Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
 
 ## Deferred Decisions
-- Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 20: search provider.
+- Phase 14 limits: decided 2026-10-07 (2 at once, 30 s, 1 retry, 10 calls, USD 0.01). Phase 18: camera style. Phase 20: search provider.
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 14 — Agent orchestration, once the user authorizes it. It opens the deferred decision on concurrency, timeouts, retries and spend limits (and with Phase 19 done, whether live questions continue past planning).
+Phase 15 — Collaboration, handoff, failure and retry visuals, once the user authorizes it. It has a visual approval checkpoint.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

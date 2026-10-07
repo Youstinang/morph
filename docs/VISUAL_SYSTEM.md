@@ -185,9 +185,12 @@ The user said the data read too technically and the UI was too noisy, and chose 
 
 - Nova walks to the Core and plans while the real planner call is in flight (the Core shows "Making a plan").
 - The plan's stations rise (with the morph sweep) and the caption reads "The plan: …" with the planner's one-line interpretation.
-- Each assigned agent walks to its station, then shows "Waiting" with its planned task. Agents without a task stay ready at home.
-- The Core turns soft amber, "Waiting for research", and the caption says live research isn't connected yet. Nothing on screen claims work that isn't happening.
-- The findings card becomes "What the plan assumes" (up to 2 assumptions), and the side column lists "Nova would ask you · answering comes later" (up to 2 questions).
+- Each assigned agent walks to its station and waits for a turn. Agents without a task stay ready at home.
+- The team works (Phase 14). Each agent shows "Working" only while its own AI call is running, and at most two work at once. A finding appears in the caption ("Orion: …"), as the station panel's headline and as a finding card line; the agent then shows "done; waiting for the team". A failure shows the agent stuck with the reason ("trying again shortly"), then "Retrying".
+- Once research has settled, Vex walks to the Core and reviews; his doubt appears as "Vex pushes back: …". Then Lume walks to the Core and works with Nova on the answer; the caption says "Lume and Nova are putting a tentative answer together."
+- The answer card is labelled "Tentative answer · {low/moderate} confidence · AI general knowledge, not research", and the Core shows the answer is ready. After a moment everyone walks home and rests.
+- If a limit or failures stop the team, the Core turns soft amber, "On hold", the caption says "The team stopped: {reason}.", and everyone walks home. Nothing on screen claims work that isn't happening.
+- Before any finding, the findings card is "What the plan assumes" (up to 2 assumptions); once findings arrive it is "What the team thinks · AI knowledge, not checked". The side column lists "Nova would ask you · answering comes later" (up to 2 questions).
 - A "Live AI" tag sits under the Core status; in development the estimated AI cost and number of calls appear under it. Both are hidden on phones, where "Back to demo" marks the mode.
 - "Back to demo" (in place of Restart) cancels any pending request and restarts the recorded demo.
 - If planning fails, the Core turns red, the caption gives the short reason, and Nova walks home.
