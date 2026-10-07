@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20, 21, 22, 23, 24, 25 and 26 are implemented (Phase 26 short of publishing, which waits for the user) and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Phases 17–26 complete (2026-10-07). The user approved the visual work of Phases 17, 18, 22, 25 and 26 at the end-of-run review. Publishing is on hold at the user's request ("not yet"). Earlier: The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -31,15 +31,15 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 14 — Agent orchestration: after planning, live questions continue. Agents work their tasks two at a time with model calls, Vex challenges the weakest point, and Lume and Nova give a labelled tentative answer, all within per-question limits enforced by the server.
 - Phase 15 — Collaboration, handoff, failure and retry visuals (visually approved 2026-10-07).
 - Phase 16 — Human-in-loop controls (visually approved 2026-10-07).
-- Phase 17 — Possibility Engine (implemented; awaiting the end-of-run visual review).
-- Phase 18 — Cinematic camera director (implemented; awaiting the end-of-run visual review).
-- Phase 20 — Research tools (implemented and validated).
-- Phase 21 — Explainability (implemented and validated).
-- Phase 22 — Flagship demo choreography (implemented; awaiting the end-of-run visual review).
-- Phase 23 — Performance and reliability (implemented and validated).
-- Phase 24 — Security and tests (implemented and validated).
-- Phase 25 — Visual polish and subtle sound (implemented; awaiting the end-of-run visual review).
-- Phase 26 — Showcase and deployment (implemented locally; publishing awaits the user's go-ahead and a deployment decision).
+- Phase 17 — Possibility Engine (complete; visually approved 2026-10-07).
+- Phase 18 — Cinematic camera director (complete; visually approved 2026-10-07).
+- Phase 20 — Research tools (complete).
+- Phase 21 — Explainability (complete).
+- Phase 22 — Flagship demo choreography (complete; visually approved 2026-10-07).
+- Phase 23 — Performance and reliability (complete).
+- Phase 24 — Security and tests (complete).
+- Phase 25 — Visual polish and subtle sound (complete; visually approved 2026-10-07).
+- Phase 26 — Showcase and deployment (complete locally; visually approved 2026-10-07; publishing on hold).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -207,7 +207,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - 2026-10-07, Phase 22 (flagship choreography, timing only; the story, its order and its words are unchanged):
   - Measured against the specification's 60-second timeline, the opening and ending matched but the middle ran 5–7 s late and squeezed the climax (the shift, the convergence and the answer within 5 s). Shorter pauses for Orion's demand and rules checks, Brix's station set-ups and Sage's estimate; Vex now walks to the cost station as soon as it opens and waits there for Sage's estimate (so the review follows the estimate without a long walk); Lume pauses a beat after the shift; the final agreement lasts 5 s.
   - Story moments now: question 0.6 s, plan 5.1 s, first handoff 15 s, discovery 21 s, budget question 23 s, Costs 27 s, Risks 30 s, Vex's challenge 35 s, send-back 37 s, Options 39 s, three paths 42 s, re-check done 43 s, the shift 46 s, convergence 49 s, answer 54 s, end 56 s.
-  - Deferred to the visual review: the specification's delegation sends three agents out at once (two researchers and the analyst); MORPH has one researcher, so two agents leave at the plan. Sending a third (for example Vex to the rules station) would change who does what in the story.
+  - Decided at the end-of-run review (2026-10-07): keep two agents. Background: the specification's delegation sends three agents out at once (two researchers and the analyst); MORPH has one researcher, so two agents leave at the plan. Sending a third (for example Vex to the rules station) would change who does what in the story.
 - 2026-10-07, Phase 23 (performance and reliability, within the approved 60 FPS target and ~30 FPS fallback):
   - Three picture presets (`src/visualization/world/quality.ts`): High (resolution up to 1.75×, floor reflections, 4× multisampling, glow and vignette), Balanced (up to 1.25×, no reflections or multisampling) and Performance (1×, no glow or vignette). The button cycles through them.
   - Automatic step-down: after a 4 s warm-up, drei's `PerformanceMonitor` watches the frame rate; when it stays under 42 FPS the picture drops one preset (shown as "(auto)"). It never steps back up on its own, so it can't flicker. Once the user picks a preset, MORPH stops changing it.
@@ -226,7 +226,8 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - `/showcase`: the largest 16:9 frame that fits the window, centred, with black bars; no toolbar and no panel buttons (the question, status, captions, findings, team bar and answer stay). Keyboard: Space pauses, R restarts, S toggles sound. Automatic camera and names are on.
   - Link previews: `src/app/opengraph-image.jpg` (1200×630, captured from the production showcase at 30 s), alt text, and Open Graph / Twitter titles and description in the root layout.
   - Deployment readiness (Vercel, as chosen): no Vercel config is needed for Next.js; the only secret is `OPENAI_API_KEY` (optional `MORPH_PLANNER_MODEL`, `MORPH_WEB_SEARCH`), set as a Vercel environment variable, never `NEXT_PUBLIC_`. Rate limits trust Vercel's address headers automatically (`VERCEL=1`). Not yet published: the Vercel CLI isn't installed and the Vercel connection isn't signed in.
-  - Deployment risk found (decision for the user): a live question's record (plan, findings, spending) is kept in one server process's memory (`run-registry.ts`). On Vercel the AI routes can run in separate, short-lived instances, so later steps may not find the question and live AI would fail with "this question has expired". The offline demo is unaffected.
+  - Decisions at the end-of-run review (2026-10-07): the demo keeps two agents leaving at delegation; once online, MORPH publishes the demo and showcase with "Ask a question" hidden, and live AI comes later (a shared store would be needed, see below); publishing waits ("not yet"). To match, `/` shows "Ask a question" only when the server has `OPENAI_API_KEY`; without one it plays as `/demo`.
+  - Deployment risk found (why live AI waits): a live question's record (plan, findings, spending) is kept in one server process's memory (`run-registry.ts`). On Vercel the AI routes can run in separate, short-lived instances, so later steps may not find the question and live AI would fail with "this question has expired". The offline demo is unaffected.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -510,7 +511,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-None until the user decides: the end-of-run visual review (Phases 17, 18, 22, 25 and 26), how live AI should work once published, and the go-ahead to publish on Vercel.
+None. All 26 phases are complete. Waiting on the user for: the go-ahead to publish on Vercel (demo and showcase, no key, so no AI cost), and later, whether to make live AI work online with a small shared store.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
