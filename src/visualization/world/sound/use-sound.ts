@@ -16,7 +16,10 @@ export function useSound(bus: EventBus) {
   }, []);
 
   useEffect(() => {
-    if (!on) return;
+    if (!on) {
+      synth.current?.pause();
+      return;
+    }
     const planner = createCuePlanner();
     return bus.subscribe((event) => {
       if (document.visibilityState !== "visible") return;

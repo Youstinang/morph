@@ -467,6 +467,16 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: step results are cast to their type in `live-question.ts`; each reply is validated with Zod and checked to be for the step asked, so the casts are safe at runtime. A few guarded `as AgentId` casts remain in the demo runtime. Left as is.
 - Boundaries: lint enforces that the visualization layer imports no orchestration, server or configuration code; the new Phase 15 visuals read only the world. Dependencies: none added since Phase 9; production audit clean. Performance: 58–60 FPS with the new effects; their geometry and materials are disposed on unmount. Secrets: neither key is in the production build. Demo leakage: the demo makes no network or model calls (tested).
 
+## Audit 2026-10-07 (after Phases 23–25)
+- Critical/High: none.
+- Fixed (Low): once turned on, the audio engine kept running after muting; muting now pauses it, and the next sound wakes it (checked in Chrome: silent while muted, sounds again after unmuting).
+- Boundaries hold: the visualization layer imports only events and state (lint-enforced); sound listens to the same event bus as the world and never writes to the record; the 3D fallback drives the same `session.advance` as the scene.
+- Ownership: picture quality is a view setting in `lab-experience`; request safety (`foreignRequest`, `clientId`) lives in one place, `src/server/http.ts`, used by all three AI routes.
+- Dependencies: one dev-only addition (`@playwright/test`); production audit clean.
+- Performance: 60 FPS at 1440×900 and 1024×700; memory flat over three demo loops; automatic step-down verified.
+- Demo leakage: the end-to-end test confirms the demo makes no network or API requests.
+- Still open (Medium, unchanged): `src/orchestration/live-question.ts` is about 670 lines; splitting it is a refactor for later, not a defect.
+
 ## Audit 2026-10-07 (after Phases 20–22)
 - No Critical or High findings.
 - Fixed (Medium): merging station changes in the "Why it changed" panel matched sentence wording written in another file; it now lives in `src/state/changes.ts` beside the wording it depends on. Fixed (Low): three copies of the "site from a link" helper became one (`siteOf` in `src/state/live-work.ts`).
@@ -488,7 +498,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-The architecture audit due after Phases 23–25, then Phase 26 — Showcase and deployment (authorized as part of the single run; ask the user right before publishing).
+Phase 26 — Showcase and deployment (authorized as part of the single run; ask the user right before publishing).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

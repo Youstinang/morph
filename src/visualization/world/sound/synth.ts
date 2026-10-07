@@ -41,6 +41,8 @@ const MASTER_GAIN = 0.16;
 
 export interface Synth {
   play(cue: Cue): void;
+  /** Lets the audio engine idle while muted; the next cue wakes it. */
+  pause(): void;
   dispose(): void;
 }
 
@@ -80,6 +82,9 @@ export function createSynth(): Synth | null {
         oscillator.start(begin);
         oscillator.stop(end + 0.05);
       }
+    },
+    pause() {
+      if (context.state === "running") void context.suspend();
     },
     dispose() {
       void context.close();
