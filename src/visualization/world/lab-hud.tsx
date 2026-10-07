@@ -3,9 +3,11 @@ import type { InputValue } from "@/state/input-controls";
 import { OBJECTIVE_LIMITS } from "@/state/plan";
 import { useWorkspace } from "@/state/react";
 import {
+  changeLines,
   findingLines,
   selectAgents,
   selectAssumptions,
+  selectChanges,
   selectEvidence,
   selectObjective,
   selectPendingInput,
@@ -53,7 +55,7 @@ function speakerColor(entry: LogEntry) {
 
 export function LabHud(props: LabHudProps) {
   const { snapshot, selected } = props;
-  const [showSteps, setShowSteps] = useState(false);
+  const [panel, setPanel] = useState<"steps" | "why" | null>(null);
   const objective = useWorkspace(selectObjective);
   const agents = useWorkspace(selectAgents);
   const evidence = useWorkspace(selectEvidence);
@@ -64,6 +66,7 @@ export function LabHud(props: LabHudProps) {
   const pending = useWorkspace(selectPendingInput);
   const humanInputs = useWorkspace((workspace) => workspace.humanInputs);
   const cost = useWorkspace((workspace) => workspace.cost);
+  const changes = useWorkspace(selectChanges);
   const [asking, setAsking] = useState(false);
   const [draft, setDraft] = useState("");
   const live = mode === "real";
@@ -84,6 +87,8 @@ export function LabHud(props: LabHudProps) {
     [evidence, assumptions, recommendation],
   );
   const answer = recommendation?.status === "final" ? recommendation : null;
+  const explained = useMemo(() => changeLines(changes, evidence, assumptions), [changes, evidence, assumptions]);
+  const toggle = (which: "steps" | "why") => setPanel((open) => (open === which ? null : which));
   const webBacked = evidence.some((item) => item.status === "accepted" && webSourceOf(item));
   const answerWebBacked = answer !== null && answer.evidenceIds.some((evidenceId) => evidence.some((item) => item.id === evidenceId && webSourceOf(item)));
 
@@ -187,16 +192,39 @@ export function LabHud(props: LabHudProps) {
             );
           })}
         </nav>
-        <section className={`lab-steps ${showSteps ? "lab-steps--open" : ""}`} aria-label="Step by step">
-          <button type="button" className="lab-btn" aria-expanded={showSteps} onClick={() => setShowSteps((value) => !value)}>
-            {showSteps ? "Hide steps" : "Show steps"}
-          </button>
-          {showSteps && (
+        <section className={`lab-steps ${panel ? "lab-steps--open" : ""}`} aria-label="Step by step">
+          <div className="lab-steps__buttons">
+            <button type="button" className="lab-btn" aria-expanded={panel === "steps"} onClick={() => toggle("steps")}>
+              {panel === "steps" ? "Hide steps" : "Show steps"}
+            </button>
+            <button type="button" className="lab-btn" aria-expanded={panel === "why"} onClick={() => toggle("why")} disabled={explained.length === 0}>
+              Why it changed{explained.length > 0 ? ` (${explained.length})` : ""}
+            </button>
+          </div>
+          {panel === "steps" && (
             <ol>
               {snapshot.log.map((entry) => (
                 <li key={entry.id}>
                   <span className="lab-caption__dot" style={{ background: speakerColor(entry) }} />
                   {entry.text}
+                </li>
+              ))}
+            </ol>
+          )}
+          {panel === "why" && (
+            <ol className="lab-why" aria-label="Why did MORPH change?">
+              {explained.map((line) => (
+                <li key={line.key}>
+                  <p className="lab-why__change">{line.change}</p>
+                  <p className="lab-why__reason">
+                    <span>{line.by}:</span> {line.reason}
+                  </p>
+                  {line.assumption && <p className="lab-why__basis">After the assumption: {line.assumption}</p>}
+                  {line.basis.length > 0 && (
+                    <p className="lab-why__basis">
+                      Based on: {line.basis.map((item) => `${item.text}${item.site ? ` (${item.site})` : ""}`).join(" · ")}
+                    </p>
+                  )}
                 </li>
               ))}
             </ol>

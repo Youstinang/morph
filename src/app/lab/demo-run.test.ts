@@ -8,6 +8,7 @@ import { AGENT_ORDER, homePosition } from "@/visualization/world/sim/roster";
 import type { AgentId, AgentState } from "@/visualization/world/sim/types";
 import { shotFocus } from "@/visualization/world/sim/camera-director";
 import { coreState, leadingScenario, scenarioViews } from "@/visualization/world/sim/world";
+import { changeLines } from "@/state/selectors";
 import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
@@ -51,6 +52,24 @@ describe("deterministic demo run", () => {
     expect(signal(session, "retry-done")!).toBeGreaterThan(signal(session, "retry")!);
     expect(signal(session, "retry-done")!).toBeLessThanOrEqual(signal(session, "shift")!);
     expect(session.run.demo.endedAt!).toBeLessThan(90);
+  });
+
+  it("explains each big change with its reason and the evidence it rests on", () => {
+    const { session } = runUntil(createLabSession(), ended);
+    const ws = session.store.getState().workspace;
+    const lines = changeLines(ws.changes, ws.evidence, ws.assumptions);
+    expect(lines.map((line) => line.change).reverse()).toEqual([
+      'Opened the "Market demand", "Competitors" and "Rules" stations',
+      'Planned the "Costs", "Risks" and "Options" stations for later',
+      'Opened the "Costs" station',
+      'Opened the "Risks" station',
+      'Opened the "Options" station',
+      expect.stringMatching(/^Started leaning toward "/),
+      expect.stringMatching(/^Gave the answer: "/),
+    ]);
+    expect(lines.find((line) => line.change.startsWith('Opened the "Options"'))).toMatchObject({ by: "Brix", assumption: expect.any(String) });
+    expect(lines[0]!.basis.length).toBeGreaterThan(0);
+    for (const line of lines) expect(line.reason.length).toBeGreaterThan(0);
   });
 
   it("drives every agent through real movement and work states", () => {

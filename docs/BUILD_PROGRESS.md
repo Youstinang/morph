@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18 and 20 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20 and 21 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -34,6 +34,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 17 — Possibility Engine (implemented; awaiting the end-of-run visual review).
 - Phase 18 — Cinematic camera director (implemented; awaiting the end-of-run visual review).
 - Phase 20 — Research tools (implemented and validated).
+- Phase 21 — Explainability (implemented and validated).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -194,6 +195,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - In the world: the browser publishes `tool_started`/`tool_completed`/`tool_failed` around each search (the plan reply says whether the server searches), and `sources_checked` fills the station's source markers with the number of real pages. The record keeps each tool call and counts them in `cost.toolCalls`. The info panel shows a small link to each sourced finding's site and reads "web pages summarized by AI, not checked"; the answer card says "partly from web pages, summarized by AI" when the answer rests on a sourced finding.
   - The specification's other suggested tools (calculator, structured compare) are not built: nothing in the current flow would call them yet, so they would be unused code. They fit the same interface later.
   - No new dependency.
+- 2026-10-07, Phase 21 (explainability, within the approved HUD patterns):
+  - The canonical record keeps "Why did MORPH change?" entries (`workspace.changes`, the latest 60). `applyMorphOperation` adds one whenever an accepted operation gives a reason and changes something that matters: opening, planning, replacing, moving, re-weighting or closing a station; replacing or setting aside a finding; the leaning and the answer; adding or re-weighing a path; confirming or rejecting an assumption. Each entry holds what changed in plain words (`src/state/changes.ts`), the reason, the cited evidence and assumption, who proposed it, and when. Deterministic, like every operation.
+  - A reason may only cite evidence and assumptions the record has; an operation whose reason cites anything else is refused. A path update's own `why` (the path's text) is no longer passed on as an operation reason.
+  - The HUD gets a "Why it changed (N)" button beside "Show steps" (one panel open at a time). Newest first, each entry shows the change, who gave the reason and the reason, the assumption it followed, and the findings it rests on (with the site for web-sourced ones). Stations opened, planned or closed together for the same reason read as one entry. Only outcome-level reasons are shown, never model reasoning. Hidden on phones, like the steps list.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -335,6 +340,9 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 21 explainability pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 186 in 24 files. New tests: what is recorded and what is left out; reasons citing missing evidence or assumptions refused; the 60-entry cap; newest-first explanations with cited evidence and site; path text kept out of the event's reason; the full demo's eight explained changes in order (Brix's "Options" station after the challenged assumption, the answer with its evidence); a live question's answer, paths station and planned stations, each with the planner's own reason.
+  - Chrome at 1440×900, demo at 57 s: the panel lists the answer, the leaning, the Options station after the assumption, the Costs and Risks stations and the plan, without covering the world's centre; no console errors. Preview: `p21-why-panel.png`.
 - Phase 20 research tools pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 179 in 23 files. New tests:
     - the web search tool: request shape, plain notes, page list cleaned, de-duplicated, http(s) only and capped at five, cost including the search fee, failures without the key, invalid input refused before any request;
@@ -431,7 +439,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 21 — Explainability (authorized as part of the single run). The next architecture audit is due after about Phase 22.
+Phase 22 — Flagship demo choreography (authorized as part of the single run). The next architecture audit is due after about Phase 22.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

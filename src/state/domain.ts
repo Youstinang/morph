@@ -204,6 +204,17 @@ export const WhySchema = z.object({
 });
 export type Why = z.infer<typeof WhySchema>;
 
+/** One entry of "Why did MORPH change?": what changed, in plain words, the reason given, and who proposed it. */
+export const ChangeSchema = z.object({
+  operationId: Id,
+  operation: z.string().min(1).max(40),
+  change: z.string().min(1).max(200),
+  why: WhySchema,
+  by: ProvenanceSchema,
+  at: Time,
+});
+export type Change = z.infer<typeof ChangeSchema>;
+
 export const WorkspaceSchema = z.object({
   id: Id,
   mode: z.enum(["demo", "real"]),
@@ -222,6 +233,8 @@ export const WorkspaceSchema = z.object({
   toolCalls: z.array(ToolCallSchema),
   cost: CostUsageSchema,
   focus: FocusSchema.nullable(),
+  /** The workspace's explained changes, oldest first (the most recent `MAX_CHANGES`). */
+  changes: z.array(ChangeSchema),
   /** Ids of operations already applied in this run, so a repeated operation is refused. */
   appliedOperationIds: z.array(Id),
 });

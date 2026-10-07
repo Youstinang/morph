@@ -449,6 +449,36 @@
 .lab-steps li:first-child {
   color: var(--text);
 }
+.lab-steps__buttons {
+  display: flex;
+  gap: 8px;
+}
+.lab-steps__buttons .lab-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.lab-steps .lab-why li {
+  display: block;
+}
+.lab-why li + li {
+  padding-top: 7px;
+  border-top: 1px solid rgb(120 150 180 / 12%);
+}
+.lab-why p {
+  margin: 0;
+}
+.lab-why__change {
+  color: var(--text);
+  font-weight: 600;
+}
+.lab-why__reason span {
+  color: var(--text);
+}
+.lab-why__basis {
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.85;
+}
 .lab-steps .lab-caption__dot {
   width: 6px;
   height: 6px;

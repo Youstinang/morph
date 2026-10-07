@@ -9,6 +9,7 @@ import {
   type Workspace,
   type WorkspaceModule,
 } from "./domain";
+import { changeReason, invalidReason, recordChange } from "./changes";
 import { InputControlSchema, InputValueSchema } from "./input-controls";
 import * as t from "./transitions";
 
@@ -132,7 +133,11 @@ export function applyMorphOperation(workspace: Workspace, input: unknown): Opera
 
   const next = transition(workspace, operation);
   if (t.refused(next)) return refuse(next);
-  return { ok: true, operation, workspace: { ...next, appliedOperationIds: [...next.appliedOperationIds, operation.id] } };
+  const why = changeReason(operation);
+  const unsupported = why && invalidReason(why, next);
+  if (unsupported) return refuse(unsupported);
+  const explained = recordChange(operation, workspace, next);
+  return { ok: true, operation, workspace: { ...explained, appliedOperationIds: [...explained.appliedOperationIds, operation.id] } };
 }
 
 function transition(ws: Workspace, o: MorphOperation): t.Transition {

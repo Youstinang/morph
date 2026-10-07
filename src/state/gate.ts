@@ -1,5 +1,6 @@
 import type { EventBus } from "@/events/bus";
 import type { EventDraft, EventSource } from "@/events/schema";
+import { changeReason } from "./changes";
 import type { Provenance, Workspace } from "./domain";
 import type { MorphOperation, OperationResult } from "./operations";
 import type { WorkspaceStore } from "./store";
@@ -86,7 +87,8 @@ export function createOperationGate(store: WorkspaceStore, bus: EventBus, now: (
         return result;
       }
       const { operation } = result;
-      const ref = { id: operation.id, type: operation.operation, source: operation.source, ...(operation.why ? { why: operation.why } : {}) };
+      const why = changeReason(operation);
+      const ref = { id: operation.id, type: operation.operation, source: operation.source, ...(why ? { why } : {}) };
       operationEvents(operation, result.workspace).forEach((draft, i) =>
         bus.publish({ ...draft, operation: ref, ...(i === 0 && options.summary ? { summary: options.summary } : {}) }, eventSource(operation.source.kind)),
       );

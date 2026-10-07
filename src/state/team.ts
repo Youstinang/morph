@@ -35,6 +35,7 @@ export function createTeamWorkspace(id: string, mode: Workspace["mode"]): Worksp
     toolCalls: [],
     cost: { modelCalls: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, estimatedUsd: 0 },
     focus: null,
+    changes: [],
     appliedOperationIds: [],
   };
 }

@@ -5,6 +5,7 @@ import { SAMPLE_PLAN } from "@/state/fixtures/sample-plan";
 import { AI_KNOWLEDGE_LABEL, AI_SUMMARY_LABEL, LIVE_LIMITS, type AgentStep, type AnswerRequest, type StepResponse } from "@/state/live-work";
 import type { PlanResponse } from "@/state/plan";
 import { coreState } from "@/visualization/world/sim/world";
+import { changeLines } from "@/state/selectors";
 import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
@@ -139,6 +140,17 @@ describe("live question: the team works", () => {
     expect(record.evidence.find((item) => item.statement === "Finding 2 from the web.")!.source).toMatchObject({ kind: "model", label: AI_KNOWLEDGE_LABEL });
     expect(record.evidence.every((item) => item.source.kind === "user" || !item.source.verified)).toBe(true);
     expect(session.world.modules[record.moduleOrder[0]!]!.evidence).toBe(2);
+
+    const explained = changeLines(record.changes, record.evidence, record.assumptions);
+    expect(explained.map((line) => line.change)).toEqual([
+      'Gave the answer: "Try one app for a month"',
+      'Opened the "Possible paths" station',
+      'Opened the "Operating risks" station',
+      'Opened the "App costs" station',
+      'Opened the "Customer demand" station',
+    ]);
+    expect(explained[0]).toMatchObject({ by: "Lume", basis: expect.arrayContaining([{ text: "Finding 1 from the web.", site: "example.com" }]) });
+    expect(explained[4]).toMatchObject({ by: "Nova", reason: SAMPLE_PLAN.modules[0]!.why });
   });
 
   it("researches, challenges and answers, as many at once as allowed, then everyone goes home", async () => {
