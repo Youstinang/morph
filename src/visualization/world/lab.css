@@ -17,6 +17,22 @@
   font-size: 12px;
   letter-spacing: 0.08em;
 }
+.lab-fallback {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: radial-gradient(ellipse at 50% 40%, rgba(40, 70, 110, 0.35), transparent 60%);
+}
+.lab-fallback p {
+  max-width: 36ch;
+  margin: 0;
+}
 .lab-hud {
   position: absolute;
   inset: 0;

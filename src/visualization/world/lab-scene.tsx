@@ -1,12 +1,14 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
-import { useMemo, useRef, type ComponentRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from "react";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { hudInsets, type HudInsets } from "./hud-layout";
 import { useReducedMotion } from "./motion";
+import { SNAPSHOT_INTERVAL } from "./snapshot";
+import { SLOW_FPS, WARM_UP_MS, type Quality } from "./quality";
 import { shotFocus } from "./sim/camera-director";
 import { sectorFramePoints } from "./sim/layout";
 import { AGENT_ORDER, homePosition } from "./sim/roster";
@@ -23,7 +25,6 @@ import { Station } from "./scene/station";
 import { TagProjector } from "./scene/tag-projector";
 import type { TagRegistry } from "./agent-tags";
 
-const SNAPSHOT_INTERVAL = 0.14;
 const OVERVIEW_TARGET = new Vector3(0, 1.6, -2.5);
 const CAMERA_START = new Vector3(1.5, 10, 18);
 const OVERVIEW_DIRECTION = CAMERA_START.clone().sub(OVERVIEW_TARGET).normalize();
@@ -277,10 +278,33 @@ function CameraFocus({ worldRef, selected, directed }: { worldRef: RefObject<Wor
   );
 }
 
+/** Reports a sustained low frame rate, once the scene has warmed up. */
+function FrameRateWatch({ onSlow }: { onSlow: () => void }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setReady(true), WARM_UP_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  if (!ready) return null;
+  return (
+    <PerformanceMonitor
+      ms={500}
+      iterations={8}
+      bounds={() => [SLOW_FPS, Number.POSITIVE_INFINITY]}
+      flipflops={Number.POSITIVE_INFINITY}
+      onDecline={onSlow}
+    />
+  );
+}
+
 interface LabSceneProps extends DriverProps {
   selected: AgentId | null;
   onSelect: (id: AgentId | null) => void;
-  quality: "high" | "balanced";
+  quality: Quality;
+  /** The frame rate stayed low; the parent may lower the quality. */
+  onSlow: () => void;
+  /** The browser took the graphics context away (for example after a GPU reset). */
+  onContextLost: () => void;
   tags: RefObject<TagRegistry>;
   /** The question panel, kept beside whoever asked. */
   inputAnchor: RefObject<HTMLElement | null>;
@@ -300,14 +324,27 @@ export default function LabScene({
   tags,
   inputAnchor,
   directed,
+  onSlow,
+  onContextLost,
 }: LabSceneProps) {
+  const lost = useRef(onContextLost);
+  useEffect(() => {
+    lost.current = onContextLost;
+  }, [onContextLost]);
   return (
     <Canvas
-      dpr={quality === "high" ? [1, 1.75] : [1, 1.25]}
+      dpr={quality === "high" ? [1, 1.75] : quality === "balanced" ? [1, 1.25] : 1}
       camera={{ position: CAMERA_START.toArray(), fov: 42, near: 0.1, far: 400 }}
       gl={{ antialias: false, powerPreference: "high-performance" }}
       onPointerMissed={() => onSelect(null)}
+      onCreated={({ gl }) => {
+        gl.domElement.addEventListener("webglcontextlost", (event) => {
+          event.preventDefault();
+          lost.current();
+        });
+      }}
     >
+      <FrameRateWatch onSlow={onSlow} />
       <SimulationDriver worldRef={worldRef} paused={paused} speed={speed} advance={advance} onSnapshot={onSnapshot} />
       <Chamber />
       <Station worldRef={worldRef} reflections={quality === "high"} />
@@ -323,10 +360,12 @@ export default function LabScene({
       <TagProjector worldRef={worldRef} registry={tags} />
       <InputAnchor worldRef={worldRef} anchor={inputAnchor} />
       <CameraFocus worldRef={worldRef} selected={selected} directed={directed} />
-      <EffectComposer multisampling={quality === "high" ? 4 : 0}>
-        <Bloom intensity={1.05} luminanceThreshold={0.72} luminanceSmoothing={0.2} mipmapBlur />
-        <Vignette offset={0.28} darkness={0.75} />
-      </EffectComposer>
+      {quality !== "performance" && (
+        <EffectComposer multisampling={quality === "high" ? 4 : 0}>
+          <Bloom intensity={1.05} luminanceThreshold={0.72} luminanceSmoothing={0.2} mipmapBlur />
+          <Vignette offset={0.28} darkness={0.75} />
+        </EffectComposer>
+      )}
     </Canvas>
   );
 }

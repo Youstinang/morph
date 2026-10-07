@@ -17,6 +17,7 @@ import {
 } from "@/state/selectors";
 import { CORE_WORDS, STATE_WORDS, sentenceCase } from "./copy";
 import { InputPanel } from "./input-panel";
+import { QUALITY_WORDS, type Quality } from "./quality";
 import { AGENTS } from "./sim/roster";
 import type { AgentId, LogEntry } from "./sim/types";
 import type { LabSnapshot } from "./snapshot";
@@ -26,7 +27,9 @@ interface LabHudProps {
   paused: boolean;
   speed: number;
   labels: boolean;
-  quality: "high" | "balanced";
+  quality: Quality;
+  /** MORPH lowered the quality on its own because the frame rate stayed low. */
+  qualityLowered: boolean;
   selected: AgentId | null;
   onTogglePause: () => void;
   onRestart: () => void;
@@ -163,8 +166,18 @@ export function LabHud(props: LabHudProps) {
               {props.autoCamera ? "Camera: auto" : "Camera: still"}
             </button>
           )}
-          <button type="button" className="lab-btn" onClick={props.onToggleQuality}>
-            {props.quality === "high" ? "High" : "Balanced"}
+          <button
+            type="button"
+            className="lab-btn"
+            onClick={props.onToggleQuality}
+            title={
+              props.qualityLowered
+                ? "Picture quality, lowered automatically because the picture was slow. Click to choose one yourself."
+                : "Picture quality. Click to change it."
+            }
+          >
+            {QUALITY_WORDS[props.quality]}
+            {props.qualityLowered ? " (auto)" : ""}
           </button>
         </div>
       </header>

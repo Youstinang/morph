@@ -3,6 +3,9 @@ import { narrate } from "./narration";
 import type { CoreState, LogEntry, World } from "./sim/types";
 import { coreState } from "./sim/world";
 
+/** Seconds between the snapshots the HUD reads. */
+export const SNAPSHOT_INTERVAL = 0.14;
+
 /** World-side HUD data: the clock, the Core's look and the narration. Facts come from the workspace store. */
 export interface LabSnapshot {
   time: number;

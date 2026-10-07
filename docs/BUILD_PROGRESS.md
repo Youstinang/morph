@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20, 21 and 22 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20, 21, 22 and 23 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -36,6 +36,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 20 — Research tools (implemented and validated).
 - Phase 21 — Explainability (implemented and validated).
 - Phase 22 — Flagship demo choreography (implemented; awaiting the end-of-run visual review).
+- Phase 23 — Performance and reliability (implemented and validated).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -204,6 +205,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Measured against the specification's 60-second timeline, the opening and ending matched but the middle ran 5–7 s late and squeezed the climax (the shift, the convergence and the answer within 5 s). Shorter pauses for Orion's demand and rules checks, Brix's station set-ups and Sage's estimate; Vex now walks to the cost station as soon as it opens and waits there for Sage's estimate (so the review follows the estimate without a long walk); Lume pauses a beat after the shift; the final agreement lasts 5 s.
   - Story moments now: question 0.6 s, plan 5.1 s, first handoff 15 s, discovery 21 s, budget question 23 s, Costs 27 s, Risks 30 s, Vex's challenge 35 s, send-back 37 s, Options 39 s, three paths 42 s, re-check done 43 s, the shift 46 s, convergence 49 s, answer 54 s, end 56 s.
   - Deferred to the visual review: the specification's delegation sends three agents out at once (two researchers and the analyst); MORPH has one researcher, so two agents leave at the plan. Sending a third (for example Vex to the rules station) would change who does what in the story.
+- 2026-10-07, Phase 23 (performance and reliability, within the approved 60 FPS target and ~30 FPS fallback):
+  - Three picture presets (`src/visualization/world/quality.ts`): High (resolution up to 1.75×, floor reflections, 4× multisampling, glow and vignette), Balanced (up to 1.25×, no reflections or multisampling) and Performance (1×, no glow or vignette). The button cycles through them.
+  - Automatic step-down: after a 4 s warm-up, drei's `PerformanceMonitor` watches the frame rate; when it stays under 42 FPS the picture drops one preset (shown as "(auto)"). It never steps back up on its own, so it can't flicker. Once the user picks a preset, MORPH stops changing it.
+  - The 3D view can fail without stopping the run. With no WebGL 2, a crash inside the 3D view (caught by an error boundary), or a graphics reset (`webglcontextlost`), the 3D view is switched off, a plain notice explains why, and a small timer outside the 3D view keeps the run and the panels going at the same pace. After a crash or reset, "Try the 3D deck again" remounts it where the run has got to.
+  - Disposal audit: every per-mount texture, material and buffer is already released through the shared `useDisposable` hook; shared shapes in `scene/geometry.ts` are cached once for the app's lifetime by design. No leaks found.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -345,6 +351,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 23 performance and reliability pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 191 in 26 files. New tests: presets step down one at a time and stop at Performance, and the button cycles through all three; without the 3D view the run keeps advancing at the chosen speed and reports snapshots, stays still when paused and stops when unmounted; a crash in the 3D view is reported and the panels stay up.
+  - Chrome at 1440×900:
+    - Normal run, three demo loops (about 130 s): 60 FPS throughout, stays on High, JavaScript memory 87 → 91 → 91 MB (flat), no page errors.
+    - CPU slowed 12×: High → Balanced (auto) after about 12 s, then Performance (auto) after about 20 s.
+    - Forced graphics reset at 6 s: the notice appeared, the story kept going in the panels (Orion's handoff, then Sage's rivals finding), and "Try the 3D deck again" brought the deck back at the current moment.
+    - WebGL switched off: the panels-only notice shows and the run plays.
+  - Production build passes; neither key appears in `.next/static`; `.env.local` is still git-ignored.
 - Phase 22 choreography pass (2026-10-07):
   - Typecheck, lint with zero warnings and all 186 tests pass unchanged (story order, every budget ending, determinism, camera shots in order).
   - Chrome at 1440×900 at 8, 28, 36, 44, 48, 53 and 56 s: Vex hands Orion the doubt at 36 s; the camera closes on the paths as "Partner locally" pulls ahead at 48 s; the answer is centred at 56 s; 60 FPS. Previews: `p22-send-back.png`, `p22-shift.png`, `p22-answer.png`.
@@ -366,7 +380,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Previews: `p18-focus-core.png`, `p18-reveal-paths.png`, `p18-answer.png`, `p18-user-drag.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
-- Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
+- Not yet verified: Safari/Firefox. Memory over three demo loops in Chrome is flat (Phase 23).
 
 ## Known Issues
 - Characters use a local auto-rig with distance-based weights:
@@ -452,10 +466,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 ## Deferred Decisions
 - Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05); USD 0.10 since Phase 20. Phase 18 camera style and Phase 20 search provider: decided 2026-10-07 (gentle; OpenAI web search).
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
-- Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
+- Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-The architecture audit due after Phases 20–22, then Phase 23 — Performance and reliability (authorized as part of the single run).
+Phase 24 — Security and tests (authorized as part of the single run).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
