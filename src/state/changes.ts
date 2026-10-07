@@ -61,6 +61,30 @@ export function describeChange(operation: MorphOperation, before: Workspace, aft
   }
 }
 
+const STATION_CHANGE = /^(Opened the|Planned the|Closed) "(.+)"( station)?( for later)?$/;
+const quoted = (titles: string[]) => (titles.length === 1 ? titles[0]! : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`);
+
+/**
+ * Stations opened, planned or closed one after another for the same reason, by the same author, read as one
+ * change. It matches the phrasing `describeChange` writes above.
+ */
+export function mergeStationChanges(changes: readonly Change[], author: (change: Change) => string): Change[] {
+  const merged: { change: Change; titles: string[]; verb: string; noun: string; later: string }[] = [];
+  for (const change of changes) {
+    const match = STATION_CHANGE.exec(change.change);
+    const last = merged.at(-1);
+    const same = match && last && last.verb === match[1] && last.later === (match[4] ?? "");
+    if (same && last.change.why.reason === change.why.reason && author(last.change) === author(change)) {
+      last.titles.push(`"${match[2]}"`);
+      continue;
+    }
+    merged.push({ change, titles: match ? [`"${match[2]}"`] : [], verb: match?.[1] ?? "", noun: match?.[3] ? " stations" : "", later: match?.[4] ?? "" });
+  }
+  return merged.map(({ change, titles, verb, noun, later }) =>
+    titles.length > 1 ? { ...change, change: `${verb} ${quoted(titles)}${noun}${later}` } : change,
+  );
+}
+
 /** The record with this operation's explained change appended, if it gave a reason and changed something that matters. */
 export function recordChange(operation: MorphOperation, before: Workspace, after: Workspace): Workspace {
   const why = changeReason(operation);

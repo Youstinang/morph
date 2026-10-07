@@ -434,6 +434,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: step results are cast to their type in `live-question.ts`; each reply is validated with Zod and checked to be for the step asked, so the casts are safe at runtime. A few guarded `as AgentId` casts remain in the demo runtime. Left as is.
 - Boundaries: lint enforces that the visualization layer imports no orchestration, server or configuration code; the new Phase 15 visuals read only the world. Dependencies: none added since Phase 9; production audit clean. Performance: 58–60 FPS with the new effects; their geometry and materials are disposed on unmount. Secrets: neither key is in the production build. Demo leakage: the demo makes no network or model calls (tested).
 
+## Audit 2026-10-07 (after Phases 20–22)
+- No Critical or High findings.
+- Fixed (Medium): merging station changes in the "Why it changed" panel matched sentence wording written in another file; it now lives in `src/state/changes.ts` beside the wording it depends on. Fixed (Low): three copies of the "site from a link" helper became one (`siteOf` in `src/state/live-work.ts`).
+- Medium, still open: `src/orchestration/live-question.ts` is about 665 lines (search events added); moving each step's result handling into its own file remains the natural split.
+- Low: `orchestration/agent-steps.ts` imports `runTool` from `src/server/tools`; it runs only on the server (the browser's live runtime never imports it), but the folder holds both. A web search reply is parsed with a loose type before its own checks, like the model provider.
+- Boundaries: tools live in `src/server/tools`, behind a validated interface; the browser only learns whether the server searches and gets checked results. Trust rules live in `src/state` (sources are http(s) only; nothing the AI writes is verified; reasons may only cite what the record has). The visualization layer still imports no orchestration, server or configuration code.
+- Dependencies: none added. Cost: a live question with web search costs about USD 0.07 (hard stop USD 0.10; `MORPH_WEB_SEARCH=off` removes the search cost). Performance: 60 FPS. Secrets: neither key in `.next/static` (Phase 20 build). Demo leakage: the demo still makes no network or model calls and never searches. Logging: unchanged.
+
 ## Audit 2026-10-07 (after Phases 16–18)
 - No Critical or High findings.
 - Medium, open: `src/orchestration/live-question.ts` grew to about 635 lines with the paths step (the question desk already moved to `live-inputs.ts`). Each step's result handling is the natural piece to move out next (into a `live-results.ts`), if Phase 20 adds more there.

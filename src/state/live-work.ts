@@ -31,6 +31,8 @@ const Key = z.string().regex(/^(none|[af]\d)$/);
 /** A page the web search returned. Only http(s) links are kept, so a link can never run script. */
 export const WebSourceSchema = z.object({ url: z.url({ protocol: /^https?$/ }).max(500), title: Text(160) }).strict();
 export type WebSource = z.infer<typeof WebSourceSchema>;
+/** A page's site as people say it: the host name without "www.". */
+export const siteOf = (url: string) => new URL(url).hostname.replace(/^www\./, "");
 /** What the web search tool returns: short notes written from the pages, and the pages themselves. */
 export const WebNotesSchema = z.object({ notes: Text(1500), sources: z.array(WebSourceSchema).min(1).max(5) }).strict();
 export type WebNotes = z.infer<typeof WebNotesSchema>;

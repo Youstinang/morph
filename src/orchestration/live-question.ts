@@ -7,6 +7,7 @@ import {
   AI_SUMMARY_LABEL,
   LIVE_LIMITS,
   WEB_SEARCH_TOOL,
+  siteOf,
   StepResponseSchema,
   type AgentStep,
   doubtedTask,
@@ -76,7 +77,6 @@ const planner: Provenance = { kind: "model", label: "Planner", agentId: PLANNER_
 const asModel = (agentId: string, label: string): Provenance => ({ kind: "model", label, agentId });
 const notConnected: StepRequester = async () => ({ ok: false, reason: "live AI isn't connected here", stop: true });
 const nameOf = (agentId: string) => TEAM_AGENTS.find((agent) => agent.id === agentId)?.name ?? agentId;
-const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "");
 /** A finding that cites the search's pages is a tool result the AI summarized; never verified either way. */
 function findingSource(result: ResearchResult) {
   const page = result.sources?.[0];
@@ -379,7 +379,7 @@ export function createLiveQuestion(
         { operation: "add_evidence", evidence: { id: evidenceId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source: findingSource(result) } },
         `finding-${task}`,
         as,
-        `${nameOf(agentId)}${result.sources?.[0] ? `, from ${hostOf(result.sources[0].url)}` : ""}: ${result.finding}`.slice(0, 240),
+        `${nameOf(agentId)}${result.sources?.[0] ? `, from ${siteOf(result.sources[0].url)}` : ""}: ${result.finding}`.slice(0, 240),
       );
       if (added) evidenceFor.set(task, evidenceId);
       if (moduleId) propose({ operation: "update_module", moduleId, changes: { summary: { headline: result.headline, detail: result.detail } } }, `summary-${task}`, as);

@@ -1,4 +1,6 @@
 import type { Agent, Assumption, Change, Evidence, HumanInputRequest, Recommendation, Workspace, WorkspaceModule } from "./domain";
+import { mergeStationChanges } from "./changes";
+import { siteOf } from "./live-work";
 import { TEAM_AGENTS } from "./team";
 
 /**
@@ -33,7 +35,7 @@ export interface FindingLine {
 /** The web page behind a tool-sourced piece of evidence, if any. */
 export function webSourceOf(item: Evidence): { url: string; site: string } | null {
   if (item.source.kind !== "tool" || !item.source.url) return null;
-  return { url: item.source.url, site: new URL(item.source.url).hostname.replace(/^www\./, "") };
+  return { url: item.source.url, site: siteOf(item.source.url) };
 }
 
 /**
@@ -81,30 +83,9 @@ function changeAuthor(change: Change): string {
   return "MORPH";
 }
 
-const STATION_CHANGE = /^(Opened the|Planned the|Closed) "(.+)"( station)?( for later)?$/;
-const quoted = (titles: string[]) => (titles.length === 1 ? titles[0]! : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`);
-
-/** Stations opened, planned or closed one after another for the same reason read as one change. */
-function mergeStations(changes: readonly Change[]): Change[] {
-  const merged: { change: Change; titles: string[]; verb: string; noun: string; later: string }[] = [];
-  for (const change of changes) {
-    const match = STATION_CHANGE.exec(change.change);
-    const last = merged.at(-1);
-    const same = match && last && last.verb === match[1] && last.later === (match[4] ?? "");
-    if (same && last.change.why.reason === change.why.reason && changeAuthor(last.change) === changeAuthor(change)) {
-      last.titles.push(`"${match[2]}"`);
-      continue;
-    }
-    merged.push({ change, titles: match ? [`"${match[2]}"`] : [], verb: match?.[1] ?? "", noun: match?.[3] ? " stations" : "", later: match?.[4] ?? "" });
-  }
-  return merged.map(({ change, titles, verb, noun, later }) =>
-    titles.length > 1 ? { ...change, change: `${verb} ${quoted(titles)}${noun}${later}` } : change,
-  );
-}
-
 /** "Why did MORPH change?", newest first: each change with its reason and the evidence and assumption it cites. */
 export function changeLines(changes: readonly Change[], evidence: readonly Evidence[], assumptions: readonly Assumption[]): ChangeLine[] {
-  return mergeStations(changes)
+  return mergeStationChanges(changes, changeAuthor)
     .map((change) => ({
       key: change.operationId,
       change: change.change,

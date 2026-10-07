@@ -11,6 +11,7 @@ import {
   assumptionKey,
   doubtedTask,
   findingKey,
+  siteOf,
   type AgentStep,
   type CombineResult,
   type CritiqueResult,
@@ -73,9 +74,8 @@ const WEB_RULES = `- Base the finding on the web notes. Keep figures, dates and 
 ${SHARED_RULES}`;
 
 const sourceKey = (index: number) => `s${index + 1}`;
-const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "");
 function notesText(notes: WebNotes): string {
-  return `${quote("Web notes", notes.notes)}\nSources:\n${notes.sources.map((source, i) => `${sourceKey(i)}: ${source.title} (${hostOf(source.url)})`).join("\n")}`;
+  return `${quote("Web notes", notes.notes)}\nSources:\n${notes.sources.map((source, i) => `${sourceKey(i)}: ${source.title} (${siteOf(source.url)})`).join("\n")}`;
 }
 
 const str = (maxLength: number) => ({ type: "string", maxLength });
@@ -88,7 +88,7 @@ function findingsText(context: StepContext): string {
   const lines = [...context.findings.entries()]
     .sort(([a], [b]) => a - b)
     .map(([task, finding]) => {
-      const basis = finding.sources?.length ? `[web: ${finding.sources.map((source) => hostOf(source.url)).join(", ")}]` : "[general knowledge]";
+      const basis = finding.sources?.length ? `[web: ${finding.sources.map((source) => siteOf(source.url)).join(", ")}]` : "[general knowledge]";
       return `${findingKey(task)} (${nameOf(context.plan.tasks[task]?.agent ?? "")}) ${basis}: ${finding.finding}`;
     });
   return lines.length ? lines.join("\n") : "(none)";
