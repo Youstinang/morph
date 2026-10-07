@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20, 21, 22, 23 and 24 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20, 21, 22, 23, 24 and 25 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -38,6 +38,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 22 — Flagship demo choreography (implemented; awaiting the end-of-run visual review).
 - Phase 23 — Performance and reliability (implemented and validated).
 - Phase 24 — Security and tests (implemented and validated).
+- Phase 25 — Visual polish and subtle sound (implemented; awaiting the end-of-run visual review).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -215,6 +216,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Rate limits no longer trust forgeable address headers. `clientId` believes `x-real-ip` / `x-forwarded-for` only when running on Vercel (`VERCEL=1`), whose proxy overwrites them; anywhere else every caller shares one bucket, so a forged header can't dodge the limits.
   - `/api/plan`, `/api/agent-step` and `/api/answer` accept only JSON sent from MORPH's own page (`foreignRequest` in `src/server/http.ts`): other content types get 415; a cross-site `Sec-Fetch-Site` or an `Origin` that doesn't match the host gets 403. This runs before anything else, so refused requests never reach the model or the rate limits. A JSON content type can't be sent cross-site without a CORS preflight, which these routes never grant.
   - End-to-end tests with Playwright (`@playwright/test` 1.63.0, Apache-2.0, dev-only, pinned; listed in the specification's stack; uses the installed Chrome, no browser download). `npm run build && npm run test:e2e` runs `tests/e2e/` against a production server on port 3110.
+- 2026-10-07, Phase 25 (visual polish and subtle sound, as chosen: muted by default with a sound button):
+  - Sound is synthesized in the browser with the Web Audio API: no sound files, no new dependency. `src/visualization/world/sound/cues.ts` maps seven real events to cues: the question arriving (`objective_received`), a task handed out, a handoff landing, a station opening, an assumption challenged, a path re-weighed, and the answer. A burst of the same event sounds once (0.7 s apart) and cues never stack (0.15 s apart); the demo makes 10 sounds in 56 s. `synth.ts` plays a few soft notes in D major, under two seconds, at low volume, through a filter and a limiter.
+  - Muted by default. The toolbar's "Sound: off/on" button creates the audio engine on the first click (browsers require a click before sound). Nothing plays while the tab is hidden. Every sound marks something already on screen. The button is hidden on phones, like the other secondary controls.
+  - Header polish: the wordmark column has a fixed width, so the question no longer slides sideways as the status line changes; on laptop widths (under 1280 px) the toolbar is more compact, so the full question fits on two lines instead of being cut off.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -356,6 +361,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 25 visual polish and sound pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 198 in 28 files; both end-to-end tests pass on a production build. New tests: only key moments map to sounds; bursts sound once and cues never stack; the full demo sounds the question first and the answer last, includes the challenge and the shift, and stays at 14 sounds or fewer.
+  - Chrome: no notes while muted; after "Sound: off" is clicked at 3 s, the station opening (5 s) and the handoff (15 s) play; no notes after muting again; no page errors.
+  - Screens at 1440×900 (4, 22, 36, 40, 47 and 56 s), 1024×700 (4, 12 and 40 s) and 390×844 (10 and 56 s): 59–60 FPS. Found and fixed: on a 1024-wide screen the question was cut off when the status read "Double-checking a doubt", and the question slid sideways whenever the status changed. Previews: `p25-desktop-header.png`, `p25-laptop-header.png`.
+  - Production build passes; neither key appears in `.next/static`.
 - Phase 24 security and tests pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 195 in 27 files. New tests: address headers ignored unless a trusted proxy set them; JSON from the page itself accepted, other content types, other sites and unreadable origins refused; the plan route refuses foreign requests before any model call.
   - End-to-end, on a production build in Chrome (2 tests, about 30 s): the flagship demo at 2× shows the question and the 3D deck, the user picks the top budget (USD 1,000,000) with the keyboard, the matching ending ("Go in alone, with UAE data hosting") is shown as demo data, and "Why it changed" lists the answer; no page errors and no network or API requests. The AI routes refuse a cross-site origin (403), a non-JSON body (415) and a cross-site fetch (403).
@@ -366,7 +376,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
     - Normal run, three demo loops (about 130 s): 60 FPS throughout, stays on High, JavaScript memory 87 → 91 → 91 MB (flat), no page errors.
     - CPU slowed 12×: High → Balanced (auto) after about 12 s, then Performance (auto) after about 20 s.
     - Forced graphics reset at 6 s: the notice appeared, the story kept going in the panels (Orion's handoff, then Sage's rivals finding), and "Try the 3D deck again" brought the deck back at the current moment.
-    - WebGL switched off: the panels-only notice shows and the run plays.
+    - WebGL switched off: the panels-only notice shows and the run plays. Preview: `p23-graphics-reset.png`.
   - Production build passes; neither key appears in `.next/static`; `.env.local` is still git-ignored.
 - Phase 22 choreography pass (2026-10-07):
   - Typecheck, lint with zero warnings and all 186 tests pass unchanged (story order, every budget ending, determinism, camera shots in order).
@@ -478,7 +488,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-Phase 25 — Visual polish and subtle sound (authorized as part of the single run; sound muted by default).
+The architecture audit due after Phases 23–25, then Phase 26 — Showcase and deployment (authorized as part of the single run; ask the user right before publishing).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

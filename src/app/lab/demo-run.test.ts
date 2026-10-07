@@ -9,6 +9,7 @@ import type { AgentId, AgentState } from "@/visualization/world/sim/types";
 import { shotFocus } from "@/visualization/world/sim/camera-director";
 import { coreState, leadingScenario, scenarioViews } from "@/visualization/world/sim/world";
 import { changeLines } from "@/state/selectors";
+import { createCuePlanner } from "@/visualization/world/sound/cues";
 import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
@@ -300,5 +301,19 @@ describe("event-driven world on the demo run", () => {
     expect(summaries).toContain("You set the launch budget: USD 500,000.");
     expect(summaries.at(-1)).toBe("The answer: start with a local partner.");
     expect(summaries).toHaveLength(new Set(summaries).size);
+  });
+
+  it("sounds only a handful of key moments, each from a real event", () => {
+    const { session } = runUntil(createLabSession(), ended);
+    const planner = createCuePlanner();
+    const cues = cycleEvents(session).flatMap((event) => {
+      const cue = planner.plan(event, event.at * 1000);
+      return cue ? [{ cue, at: Math.round(event.at) }] : [];
+    });
+    expect(cues[0]).toEqual({ cue: "core", at: 1 });
+    expect(cues.at(-1)?.cue).toBe("converge");
+    expect(cues.map((c) => c.cue)).toContain("challenge");
+    expect(cues.map((c) => c.cue)).toContain("shift");
+    expect(cues.length).toBeLessThanOrEqual(14);
   });
 });

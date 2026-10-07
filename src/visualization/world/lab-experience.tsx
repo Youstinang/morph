@@ -9,6 +9,7 @@ import { LabHud } from "./lab-hud";
 import { ReducedMotionContext, usePrefersReducedMotion } from "./motion";
 import { lowerQuality, nextQuality, webglAvailable, type Quality } from "./quality";
 import { FallbackDriver, SceneBoundary } from "./scene-fallback";
+import { useSound } from "./sound/use-sound";
 import type { LabSession } from "./sim/session";
 import type { AgentId, World } from "./sim/types";
 import { takeSnapshot, type LabSnapshot } from "./snapshot";
@@ -50,6 +51,7 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
   const [autoCamera, setAutoCamera] = useState(true);
   const [selected, setSelected] = useState<AgentId | null>(null);
   const reducedMotion = usePrefersReducedMotion();
+  const sound = useSound(session.bus);
 
   const handleSnapshot = useCallback(
     (world: World) => setSnapshot(takeSnapshot(world, session.bus.history())),
@@ -140,6 +142,8 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
             onRestart={restart}
             onSpeed={() => setSpeedIndex((index) => (index + 1) % SPEEDS.length)}
             onToggleLabels={() => setLabels((value) => !value)}
+            sound={sound.on}
+            onToggleSound={sound.toggle}
             onToggleQuality={() => {
               setQualityChosen(true);
               setQuality(nextQuality);

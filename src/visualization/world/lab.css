@@ -78,6 +78,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Fixed, so the question doesn't shift sideways as the status under the wordmark changes length. */
+  width: 210px;
 }
 .lab-core {
   display: inline-flex;
@@ -895,11 +897,30 @@
   .lab-objective {
     font-size: 15px;
   }
+  .lab-brand {
+    width: 140px;
+  }
+  .lab-core {
+    align-items: baseline;
+  }
+  .lab-top {
+    gap: 16px;
+  }
+  .lab-controls {
+    gap: 4px;
+  }
+  .lab-controls .lab-btn {
+    padding: 0 9px;
+    font-size: 12px;
+  }
 }
 
 @media (max-width: 900px) {
   .lab-top {
     grid-template-columns: 1fr auto;
+  }
+  .lab-brand {
+    width: auto;
   }
   .lab-cost,
   .lab-objective__mode {

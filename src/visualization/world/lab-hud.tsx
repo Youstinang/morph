@@ -36,6 +36,8 @@ interface LabHudProps {
   onSpeed: () => void;
   onToggleLabels: () => void;
   onToggleQuality: () => void;
+  sound: boolean;
+  onToggleSound: () => void;
   autoCamera: boolean;
   /** Null when the camera can't move on its own (reduced motion). */
   onToggleCamera: (() => void) | null;
@@ -166,6 +168,15 @@ export function LabHud(props: LabHudProps) {
               {props.autoCamera ? "Camera: auto" : "Camera: still"}
             </button>
           )}
+          <button
+            type="button"
+            className="lab-btn"
+            onClick={props.onToggleSound}
+            aria-pressed={props.sound}
+            title="Soft sounds for key moments. Everything they mark is also on screen."
+          >
+            {props.sound ? "Sound: on" : "Sound: off"}
+          </button>
           <button
             type="button"
             className="lab-btn"
