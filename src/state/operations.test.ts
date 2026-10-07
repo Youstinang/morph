@@ -129,9 +129,10 @@ describe("applyMorphOperation", () => {
     const claim = ops.evidence("ev-claim") as Extract<MorphOperation, { operation: "add_evidence" }>;
     expect(refusal(ws, { ...claim, source: model, evidence: { ...claim.evidence, source: { kind: "model", label: "LLM", verified: true } } })).toMatch(/verified/);
     expect(refusal(ws, { ...claim, source: model, evidence: { ...claim.evidence, source: { kind: "user", label: "You", verified: true } } })).toMatch(/only the user/);
-    expect(refusal(ws, { operation: "answer_human_input", id: id(), source: model, requestId: "budget", answer: "USD 9" })).toMatch(/only the user/);
+    expect(refusal(ws, { operation: "answer_human_input", id: id(), source: model, requestId: "budget", value: "USD 9" })).toMatch(/only the user/);
+    expect(refusal(ws, { operation: "skip_human_input", id: id(), source: model, requestId: "budget" })).toMatch(/only the user/);
     expect(refusal(ws, { operation: "set_objective", id: id(), source: model, objectiveId: "q", text: "Something else" })).toMatch(/only the user/);
-    expect(applyMorphOperation(ws, { operation: "answer_human_input", id: id(), source: { kind: "user" }, requestId: "budget", answer: "USD 9" }).ok).toBe(true);
+    expect(applyMorphOperation(ws, { operation: "answer_human_input", id: id(), source: { kind: "user" }, requestId: "budget", value: "USD 9" }).ok).toBe(true);
   });
 
   it("moves modules, resizes them and steps emphasis up and down", () => {

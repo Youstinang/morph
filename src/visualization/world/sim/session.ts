@@ -1,4 +1,5 @@
 import type { EventBus } from "@/events/bus";
+import type { InputValue } from "@/state/input-controls";
 import type { WorkspaceStore } from "@/state/store";
 import type { World } from "./types";
 import { createWorld, reactToEvent, stepWorld, type WorldReport } from "./world";
@@ -51,5 +52,9 @@ export interface LabSession {
   advance(realSeconds: number, speed: number): World;
   restart(): void;
   startLive(objective: string): void;
-  answerBudget(): boolean;
+  /** The user's answer to a pending question, as a value its control accepts. */
+  answerInput(requestId: string, value: InputValue): boolean;
+  skipInput(requestId: string): boolean;
+  /** The user has started answering; the demo stops answering for them. */
+  holdInput(): void;
 }

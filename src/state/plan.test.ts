@@ -3,7 +3,7 @@ import { createEventBus } from "@/events/bus";
 import { WorkspaceSchema } from "./domain";
 import { createOperationGate } from "./gate";
 import { SAMPLE_PLAN } from "./fixtures/sample-plan";
-import { createLiveWorkspace, parsePlan, planToOperations, tidyPlan, type Plan } from "./plan";
+import { createLiveWorkspace, parsePlan, planControl, planToOperations, tidyPlan, type Plan, type PlanControl } from "./plan";
 import { createWorkspaceStore } from "./store";
 
 
@@ -49,11 +49,27 @@ describe("plan contract", () => {
     const ws = store.getState().workspace;
     expect(ws.moduleOrder).toEqual(ops.moduleIds);
     expect(ws.modules["live1-m2"]).toMatchObject({ title: "App costs", kind: "economics", group: "analysis" });
-    expect(ws.humanInputs[0]).toMatchObject({ status: "pending", askedBy: "nova" });
+    expect(ws.humanInputs[0]).toMatchObject({ status: "pending", askedBy: "nova", control: { type: "number", min: 0, max: 500, unit: "orders" } });
     expect(ws.agents.vex).toMatchObject({ state: "assigned", task: "testing what could go wrong" });
     expect(ws.evidence).toEqual([]);
     expect(bus.history().find((event) => event.type === "module_created")?.operation?.why?.reason).toBe(SAMPLE_PLAN.modules[0]!.why);
     expect(WorkspaceSchema.safeParse(ws).success).toBe(true);
+  });
+
+  it("turns the planner's control requests into trusted controls, or a text box when they don't fit", () => {
+    const ask = (control: Partial<PlanControl>) => planControl({ type: "text", options: [], min: null, max: null, unit: null, ...control });
+    expect(ask({ type: "currency", min: 0, max: 50000, unit: "usd" })).toEqual({ type: "currency", min: 0, max: 50000, currency: "USD" });
+    expect(ask({ type: "currency", unit: "€" })).toEqual({ type: "currency", min: 0, max: 1e12, currency: "EUR" });
+    expect(ask({ type: "currency", unit: "dollars" })).toEqual({ type: "number", min: 0, max: 1e12, unit: "dollars" });
+    expect(ask({ type: "percentage" })).toEqual({ type: "percentage", min: 0, max: 100 });
+    expect(ask({ type: "slider", min: 0, max: 120, unit: "days" })).toEqual({ type: "slider", min: 0, max: 120, step: 10, unit: "days" });
+    expect(ask({ type: "slider", min: 0 })).toEqual({ type: "text", maxLength: 200 });
+    expect(ask({ type: "single_choice", options: ["Weekdays", "weekdays"] })).toEqual({ type: "text", maxLength: 200 });
+    expect(ask({ type: "multi_choice", options: ["Talabat", "Careem"] })).toEqual({ type: "multi_choice", options: ["Talabat", "Careem"] });
+    expect(ask({ type: "confirmation", options: ["ignored"] })).toEqual({ type: "confirmation" });
+    expect(ask({ type: "number", min: 10, max: 5 })).toEqual({ type: "text", maxLength: 200 });
+    expect(parsePlan({ ...SAMPLE_PLAN, questions: [{ question: "Budget?" }] })).toMatchObject({ ok: true, plan: { questions: [{ control: { type: "text" } }] } });
+    expect(parsePlan({ ...SAMPLE_PLAN, questions: [{ question: "Budget?", control: { type: "script", options: [], min: null, max: null, unit: null } }] }).ok).toBe(false);
   });
 
   it("starts a live workspace empty, with the demo's team, in real mode", () => {

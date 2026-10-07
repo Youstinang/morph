@@ -18,7 +18,7 @@ export type DemoAction =
   | { kind: "emit"; signal: string }
   | { kind: "handoff"; to: TeamAgentId; artifact: ArtifactKind; signal: string; task: string };
 
-export const BUDGET_AUTO_CONFIRM_SECONDS = 3.5;
+export const BUDGET_AUTO_CONFIRM_SECONDS = 5;
 
 /**
  * Agent `task` strings are "-ing" phrases so they read both as a status ("Checking…")

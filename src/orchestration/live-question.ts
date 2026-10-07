@@ -17,7 +17,11 @@ import {
 } from "@/state/live-work";
 import { PLANNER_AGENT, PlanResponseSchema, planToOperations, type Plan, type PlanResponse } from "@/state/plan";
 import { TEAM_AGENTS } from "@/state/team";
+import type { InputControl, InputValue } from "@/state/input-controls";
+import { createQuestionDesk, type AnswerRequester } from "./live-inputs";
 import { createScheduler, type Scheduler, type SchedulerEvent, type TaskOutcome } from "./scheduler";
+
+export type { AnswerRequester } from "./live-inputs";
 
 /**
  * Live runtime for a question typed by the user. The user's question is recorded; Nova walks to the Core
@@ -53,6 +57,9 @@ export type LivePhase = "starting" | "reading" | "planning" | "assigning" | "wor
 
 export interface LiveQuestion {
   step(dt: number): void;
+  /** The user's answer to one of Nova's questions; false if it isn't open or the value doesn't fit. */
+  answer(requestId: string, value: InputValue): boolean;
+  skip(requestId: string): boolean;
   readonly phase: LivePhase;
   readonly endedAt: null;
   dispose(): void;
@@ -74,6 +81,7 @@ export function createLiveQuestion(
   objective: string,
   requestPlan: PlanRequester,
   requestStep: StepRequester = notConnected,
+  requestAnswer?: AnswerRequester,
 ): LiveQuestion {
   const controller = new AbortController();
   const prefix = `live${cycle}`;
@@ -98,6 +106,13 @@ export function createLiveQuestion(
   const propose = (operation: Record<string, unknown>, name: string, as: Provenance, summary?: string) =>
     gate.submit({ ...operation, id: id(name) }, summary ? { as, summary } : { as }).ok;
   const later = (seconds: number, run: () => void) => timers.push({ at: now() + seconds, run });
+  const desk = createQuestionDesk({
+    propose,
+    note: (summary) => publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: "going on without your answer", summary }),
+    runId: () => runId,
+    requestAnswer,
+    signal: controller.signal,
+  });
   const send = (agentId: string, target: { kind: "core" } | { kind: "home" } | { kind: "module"; moduleId: string }, task: string, travel?: "retrying") => {
     at.delete(agentId);
     publish({ type: "agent_assigned", agentId, target, task, travel: travel ?? (target.kind === "home" ? "returning" : "moving") });
@@ -131,9 +146,13 @@ export function createLiveQuestion(
     const opened = ops.modules.filter((operation, i) => propose(operation, `module-${i}`, planner));
     if (opened.length === 0) return fail("none of the planned stations could be opened");
     ops.assumptions.forEach((operation, i) => propose(operation, `assumption-${i}`, planner));
-    ops.questions.forEach((operation, i) => propose(operation, `question-${i}`, planner));
+    ops.questions.forEach((operation, i) => {
+      const name = `question-${i}`;
+      if (propose(operation, name, planner)) desk.add(String(operation.requestId), i, plan!.questions[i]!.question, operation.control as InputControl);
+    });
     publish({ type: "workspace_morph_completed" });
-    publish({ type: "task_completed", agentId: PLANNER_AGENT, task: "handing out the work", moduleId: null });
+    if (desk.open) publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: "waiting for your answer" });
+    else publish({ type: "task_completed", agentId: PLANNER_AGENT, task: "handing out the work", moduleId: null });
 
     queue = ops.assignments;
     nextAssignAt = now() + ASSIGN_DELAY;
@@ -216,7 +235,7 @@ export function createLiveQuestion(
       id: "critique",
       dependsOn: research,
       needs: "any",
-      ready: () => at.get(CRITIC) === "core" && isSettled(work.status("combine")) && !handingTo(CRITIC),
+      ready: () => at.get(CRITIC) === "core" && isSettled(work.status("combine")) && desk.settled && !handingTo(CRITIC),
       run: ask({ kind: "critique" }),
     });
     work.add({
@@ -362,7 +381,7 @@ export function createLiveQuestion(
       publish({ type: "task_completed", agentId, task: stands ? "the finding stands" : "revised the finding", moduleId, ...(stands ? { summary: `${nameOf(agentId)} re-checked: the finding stands.` } : {}) });
     } else {
       const result = event.value as SynthesisResult;
-      const evidenceIds = result.basis.flatMap((key) => evidenceFor.get(Number(key.slice(1)) - 1) ?? []);
+      const evidenceIds = [...result.basis.flatMap((key) => evidenceFor.get(Number(key.slice(1)) - 1) ?? []), ...desk.evidenceIds];
       const ok = propose(
         {
           operation: "update_recommendation",
@@ -386,6 +405,7 @@ export function createLiveQuestion(
   let analystSent = false;
   let gathered = false;
   let criticSent = false;
+  let criticWaiting = false;
   let synthesizerSent = false;
   function direct() {
     const work = scheduler!;
@@ -395,8 +415,13 @@ export function createLiveQuestion(
       send(ANALYST, { kind: "core" }, "collecting the team's findings");
     }
     if (isSettled(work.status("combine")) && !criticSent && work.status("critique") === "pending") {
-      criticSent = true;
-      send(CRITIC, { kind: "core" }, "going to review the team's work");
+      if (desk.settled) {
+        criticSent = true;
+        send(CRITIC, { kind: "core" }, "going to review the team's work");
+      } else if (!criticWaiting && !handingFrom(CRITIC) && at.has(CRITIC)) {
+        criticWaiting = true;
+        publish({ type: "agent_waiting", agentId: CRITIC, task: "waiting for your answer to Nova", summary: "Vex will review once you've answered Nova's question." });
+      }
     }
     const recheckDone = recheckTask === null || isSettled(work.status("recheck"));
     if (isSettled(work.status("critique")) && recheckDone && !synthesizerSent && work.status("synthesis") === "pending") {
@@ -441,7 +466,7 @@ export function createLiveQuestion(
     if (phase !== "assigning" || queue.length > 0 || travelling.size > 0) return;
     if (scheduler) {
       phase = "working";
-      publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: "keeping an eye on the team" });
+      publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: desk.open ? "waiting for your answer" : "keeping an eye on the team" });
       return;
     }
     phase = "waiting";
@@ -479,9 +504,14 @@ export function createLiveQuestion(
     handoff.landed();
   });
 
+  /** Only the user's answer holds the team up, so that wait doesn't count toward the work deadline. */
+  const waitingOnYou = () => !desk.settled && scheduler !== null && isSettled(scheduler.status("combine")) && scheduler.status("critique") === "pending";
+
   return {
-    step() {
+    step(dt) {
       const time = now();
+      desk.step();
+      if (waitingOnYou()) deadline += dt;
       if (phase === "starting" && time >= LIVE_OBJECTIVE_AT) {
         phase = "reading";
         if (!propose({ operation: "set_objective", objectiveId: id("objective"), text: objective }, "objective", { kind: "user" }, "You asked the team a question.")) {
@@ -517,6 +547,16 @@ export function createLiveQuestion(
         timers.splice(timers.indexOf(timer), 1);
         timer.run();
       }
+    },
+    answer(requestId, value) {
+      const ok = desk.answer(requestId, value);
+      if (ok && !desk.open && at.get(PLANNER_AGENT) !== undefined && phase === "working") publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: "keeping an eye on the team" });
+      return ok;
+    },
+    skip(requestId) {
+      const ok = desk.skip(requestId);
+      if (ok && !desk.open && at.get(PLANNER_AGENT) !== undefined && phase === "working") publish({ type: "agent_waiting", agentId: PLANNER_AGENT, task: "keeping an eye on the team" });
+      return ok;
     },
     get phase() {
       return phase;

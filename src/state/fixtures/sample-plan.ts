@@ -14,5 +14,7 @@ export const SAMPLE_PLAN: Plan = {
     { agent: "vex", module: "risks", task: "testing what could go wrong" },
   ],
   assumptions: [{ statement: "The bakery can list on at least one app.", raisedBy: "nova" }],
-  questions: [{ question: "How many extra orders a day can the kitchen handle?" }],
+  questions: [
+    { question: "How many extra orders a day can the kitchen handle?", control: { type: "number", options: [], min: 0, max: 500, unit: "orders" } },
+  ],
 };

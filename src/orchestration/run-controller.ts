@@ -2,10 +2,11 @@ import { createEventBus, type EventBus } from "@/events/bus";
 import { connectWorkspace } from "@/state/apply-event";
 import { createUaeWorkspace } from "@/state/fixtures/uae-market";
 import { createOperationGate, type OperationGate } from "@/state/gate";
+import type { InputValue } from "@/state/input-controls";
 import { createLiveWorkspace } from "@/state/plan";
 import { createWorkspaceStore, type WorkspaceStore } from "@/state/store";
 import { createDemoRuntime, type DemoRuntime } from "./demo/runtime";
-import { createLiveQuestion, type LiveQuestion, type PlanRequester, type StepRequester } from "./live-question";
+import { createLiveQuestion, type AnswerRequester, type LiveQuestion, type PlanRequester, type StepRequester } from "./live-question";
 
 /** The run clock's fixed step. Every run advances in these steps, whatever the display's frame rate. */
 export const FIXED_STEP = 1 / 60;
@@ -45,8 +46,12 @@ export interface RunController {
   restart(): void;
   /** Clears the deck and works on the user's own question with the real planner. */
   startLive(objective: string): void;
-  /** Trusted user input: confirms the demo's budget question. */
-  answerBudget(): boolean;
+  /** Trusted user input: answers a pending question with a value its control accepts. */
+  answerInput(requestId: string, value: InputValue): boolean;
+  /** Trusted user input: skips a pending live question; the team goes on without it. */
+  skipInput(requestId: string): boolean;
+  /** The user has started answering, so the demo's autoplay leaves the question to them. */
+  holdInput(): void;
   attach(stage: RunStage): () => void;
 }
 
@@ -55,6 +60,8 @@ export interface RunControllerOptions {
   requestPlan?: PlanRequester;
   /** How the team's later steps reach the server; without it, the team waits at its stations after planning. */
   requestStep?: StepRequester;
+  /** How the user's answers to the team's questions reach the server's record of the question. */
+  requestAnswer?: AnswerRequester;
 }
 
 const notConnected: PlanRequester = async () => ({ ok: false, reason: "live AI isn't connected here" });
@@ -144,9 +151,13 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
     startLive(objective) {
       clear("real");
       begin();
-      live = createLiveQuestion(bus, gate, () => time, cycle, objective, requestPlan, options.requestStep);
+      live = createLiveQuestion(bus, gate, () => time, cycle, objective, requestPlan, options.requestStep, options.requestAnswer);
     },
-    answerBudget: () => (live ? false : demo.answer("budget", "user")),
+    answerInput: (requestId, value) => (live ? live.answer(requestId, value) : demo.answer(requestId, value, "user")),
+    skipInput: (requestId) => (live ? live.skip(requestId) : false),
+    holdInput: () => {
+      if (!live) demo.hold();
+    },
     attach(stage) {
       stages.add(stage);
       return () => stages.delete(stage);

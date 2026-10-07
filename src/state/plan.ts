@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ModuleGroupSchema, type ModuleGroup, type Workspace } from "./domain";
+import { INPUT_CONTROL_TYPES, InputControlSchema, TEXT_CONTROL, type InputControl } from "./input-controls";
 import type { MorphOperation } from "./operations";
 import { createTeamWorkspace } from "./team";
 
@@ -23,6 +24,22 @@ const Text = (max: number) => z.string().trim().min(1).max(max);
 const PlanModuleSchema = z
   .object({ key: Text(40), title: Text(40), kind: z.enum(PLAN_KINDS), group: ModuleGroupSchema, why: Text(200) })
   .strict();
+/**
+ * How the planner asks for a control: a flat shape that is easy for a model to fill in. `planControl` turns
+ * it into one of MORPH's trusted controls, falling back to a plain text box when the pieces don't fit.
+ */
+export const PlanControlSchema = z
+  .object({
+    type: z.enum(INPUT_CONTROL_TYPES),
+    options: z.array(Text(40)).max(5),
+    min: z.number().finite().nullable(),
+    max: z.number().finite().nullable(),
+    unit: z.string().trim().max(12).nullable(),
+  })
+  .strict();
+export type PlanControl = z.infer<typeof PlanControlSchema>;
+const PLAIN_QUESTION: PlanControl = { type: "text", options: [], min: null, max: null, unit: null };
+
 const PlanTaskSchema = z.object({ agent: z.enum(PLAN_AGENTS), module: Text(40), task: Text(90) }).strict();
 
 export const PlanSchema = z
@@ -31,7 +48,7 @@ export const PlanSchema = z
     modules: z.array(PlanModuleSchema).min(2).max(PLAN_LIMITS.modules),
     tasks: z.array(PlanTaskSchema).min(1).max(PLAN_LIMITS.tasks),
     assumptions: z.array(z.object({ statement: Text(140), raisedBy: z.enum(TEAM) }).strict()).max(PLAN_LIMITS.assumptions),
-    questions: z.array(z.object({ question: Text(140) }).strict()).max(PLAN_LIMITS.questions),
+    questions: z.array(z.object({ question: Text(140), control: PlanControlSchema.default(PLAIN_QUESTION) }).strict()).max(PLAN_LIMITS.questions),
   })
   .strict()
   .superRefine((plan, ctx) => {
@@ -156,12 +173,56 @@ export function planToOperations(plan: Plan, prefix: string): PlanOperations {
       requestId: `${prefix}-q${i + 1}`,
       question: item.question,
       askedBy: PLANNER_AGENT,
+      control: planControl(item.control),
     })),
     assignments: plan.tasks.map((task) => {
       const moduleId = idFor.get(task.module)!;
       return { agentId: task.agent, moduleId, task: task.task, operation: { operation: "assign_agent", agentId: task.agent, task: task.task, moduleId } };
     }),
   };
+}
+
+const CURRENCY_SIGNS: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP" };
+
+/** A step that moves a slider across its range in about 20 round moves. */
+function sliderStep(span: number) {
+  const raw = span / 20;
+  const scale = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 5, 10].map((m) => m * scale).find((step) => step >= raw) ?? raw;
+}
+
+/** Turns the planner's control request into a trusted control; anything that doesn't fit becomes a text box. */
+export function planControl(request: PlanControl): InputControl {
+  const unit = request.unit?.trim() || null;
+  const code = unit && (/^[A-Za-z]{3}$/.test(unit) ? unit.toUpperCase() : CURRENCY_SIGNS[unit]);
+  const options = [...new Map(request.options.map((option) => [option.trim().toLowerCase(), option.trim()])).values()];
+  const candidate = (): unknown => {
+    switch (request.type) {
+      case "text":
+        return TEXT_CONTROL;
+      case "confirmation":
+        return { type: "confirmation" };
+      case "single_choice":
+      case "multi_choice":
+        return { type: request.type, options };
+      case "percentage":
+        return { type: "percentage", min: request.min ?? 0, max: request.max ?? 100 };
+      case "number":
+      case "currency": {
+        const min = request.min ?? 0;
+        const max = request.max ?? 1e12;
+        if (request.type === "currency" && code) return { type: "currency", min, max, currency: code };
+        return { type: "number", min, max, ...(unit ? { unit } : {}) };
+      }
+      case "slider": {
+        if (request.min === null || request.max === null) return null;
+        const step = sliderStep(request.max - request.min);
+        return { type: "slider", min: request.min, max: request.max, step, ...(code ? { currency: code } : unit ? { unit } : {}) };
+      }
+    }
+  };
+  const parsed = InputControlSchema.safeParse(candidate());
+  return parsed.success ? parsed.data : TEXT_CONTROL;
 }
 
 /** An empty workspace for a live question, with the standing team. */

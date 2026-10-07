@@ -114,6 +114,7 @@ export const EventDraftSchema = z.discriminatedUnion("type", [
 
   event("human_input_requested", { requestId: Id, question: z.string().min(1).max(600), askedBy: Id }),
   event("human_input_received", { requestId: Id, answer: z.string().min(1).max(200), answeredBy: z.enum(["user", "autoplay"]) }),
+  event("human_input_skipped", { requestId: Id, skippedBy: z.enum(["user", "autoplay"]) }),
 
   event("scenario_created", { scenario: ScenarioInputSchema }),
   event("scenario_updated", { scenario: ScenarioInputSchema }),
@@ -159,6 +160,7 @@ export const RECORD_EVENTS = new Set<string>([
   "recommendation_updated",
   "human_input_requested",
   "human_input_received",
+  "human_input_skipped",
   "task_assigned",
   "camera_focus_requested",
 ]);

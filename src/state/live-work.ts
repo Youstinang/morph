@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { InputValueSchema } from "./input-controls";
 import { PlanUsageSchema } from "./plan";
 
 /**
@@ -71,6 +72,27 @@ export const StepResponseSchema = z.union([
   z.object({ ok: z.literal(false), reason: Text(200), stop: z.boolean().optional(), usage: PlanUsageSchema.optional() }),
 ]);
 export type StepResponse = z.infer<typeof StepResponseSchema>;
+
+/**
+ * The user's reply to one of Nova's questions, sent so the server's record (and so Vex's and Lume's
+ * prompts) include it. `question` is the question's place in the plan; the server checks the value against
+ * that question's control. No model call is made.
+ */
+export const AnswerRequestSchema = z
+  .object({
+    runId: RunIdSchema,
+    question: z.number().int().min(0).max(9),
+    reply: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("answer"), value: InputValueSchema }).strict(),
+      z.object({ kind: z.literal("skip") }).strict(),
+    ]),
+  })
+  .strict();
+export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
+export const AnswerResponseSchema = z.union([z.object({ ok: z.literal(true) }).strict(), z.object({ ok: z.literal(false), reason: Text(200) }).strict()]);
+export type AnswerResponse = z.infer<typeof AnswerResponseSchema>;
+/** What the server keeps of a reply: how the answer reads, or that the user skipped the question. */
+export type QuestionReply = { kind: "answer"; display: string } | { kind: "skip" };
 
 export const findingKey = (task: number) => `f${task + 1}`;
 export const assumptionKey = (index: number) => `a${index + 1}`;

@@ -1,5 +1,5 @@
 import type { StepContext } from "@/orchestration/agent-steps";
-import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
+import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type QuestionReply, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
 import type { Plan, PlanUsage } from "@/state/plan";
 
 /**
@@ -20,6 +20,7 @@ export interface RunRecord extends StepContext {
   critique: CritiqueResult | null;
   recheck: RecheckResult | null;
   answer: SynthesisResult | null;
+  replies: Map<number, QuestionReply>;
 }
 
 export interface RunRegistry {
@@ -73,6 +74,7 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
         critique: null,
         recheck: null,
         answer: null,
+        replies: new Map(),
       });
       return id;
     },

@@ -13,6 +13,7 @@ import type { AgentId, World } from "./sim/types";
 import { Artifacts } from "./scene/artifacts";
 import { Collaborations } from "./scene/collaboration";
 import { FailedCards } from "./scene/failed-cards";
+import { HumanInput, InputAnchor } from "./scene/human-input";
 import { Chamber } from "./scene/chamber";
 import { Character } from "./scene/character";
 import { IntentCore } from "./scene/intent-core";
@@ -260,6 +261,8 @@ interface LabSceneProps extends DriverProps {
   onSelect: (id: AgentId | null) => void;
   quality: "high" | "balanced";
   tags: RefObject<TagRegistry>;
+  /** The question panel, kept beside whoever asked. */
+  inputAnchor: RefObject<HTMLElement | null>;
 }
 
 export default function LabScene({
@@ -272,6 +275,7 @@ export default function LabScene({
   onSelect,
   quality,
   tags,
+  inputAnchor,
 }: LabSceneProps) {
   return (
     <Canvas
@@ -291,7 +295,9 @@ export default function LabScene({
       <Artifacts worldRef={worldRef} />
       <Collaborations worldRef={worldRef} />
       <FailedCards worldRef={worldRef} />
+      <HumanInput worldRef={worldRef} />
       <TagProjector worldRef={worldRef} registry={tags} />
+      <InputAnchor worldRef={worldRef} anchor={inputAnchor} />
       <CameraFocus worldRef={worldRef} selected={selected} />
       <EffectComposer multisampling={quality === "high" ? 4 : 0}>
         <Bloom intensity={1.05} luminanceThreshold={0.72} luminanceSmoothing={0.2} mipmapBlur />

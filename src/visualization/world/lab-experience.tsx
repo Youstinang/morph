@@ -23,6 +23,7 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
   const [session] = useState(createSession);
   const worldRef = useRef<World>(session.world);
   const tags = useRef<TagRegistry>({});
+  const inputAnchor = useRef<HTMLElement | null>(null);
   const [snapshot, setSnapshot] = useState<LabSnapshot>(() => takeSnapshot(session.world, session.bus.history()));
   const [paused, setPaused] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
@@ -68,6 +69,7 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
               onSelect={setSelected}
               quality={quality}
               tags={tags}
+              inputAnchor={inputAnchor}
             />
           </div>
           <AgentTags registry={tags} selected={selected} />
@@ -86,10 +88,16 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
             onSelect={setSelected}
             onAsk={ask}
             onBackToDemo={restart}
-            onConfirmBudget={() => {
-              session.answerBudget();
+            inputAnchor={inputAnchor}
+            onAnswer={(requestId, value) => {
+              session.answerInput(requestId, value);
               handleSnapshot(session.world);
             }}
+            onSkip={(requestId) => {
+              session.skipInput(requestId);
+              handleSnapshot(session.world);
+            }}
+            onEngageInput={() => session.holdInput()}
           />
         </main>
       </ReducedMotionContext.Provider>

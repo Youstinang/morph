@@ -221,7 +221,14 @@ export interface ScenarioWeights {
   delay: number;
 }
 
-/** What the world has been told about the run so far; drives the Core, the options display and the budget cue. */
+/** The user's answer travelling from the asker's question panel into the Core. */
+export interface AnswerCard {
+  /** Where the asker stood when the answer came. */
+  from: Vec2;
+  startedAt: number;
+}
+
+/** What the world has been told about the run so far; drives the Core, the options display and the question cue. */
 export interface StoryView {
   objectiveAt: number | null;
   planningAt: number | null;
@@ -229,7 +236,8 @@ export interface StoryView {
   challengeOpen: boolean;
   synthesisAt: number | null;
   answeredAt: number | null;
-  budgetPending: boolean;
+  /** Questions waiting for the user, and who asked the oldest one; the question panel stands beside them. */
+  openInputs: { requestId: string; askedBy: AgentId }[];
   scenarios: ScenarioWeights | null;
   /** The run is paused on something outside the team's reach, or has failed. */
   waitingAt: number | null;
@@ -250,6 +258,7 @@ export interface World {
   /** Recent catches, kept briefly for the catch pulse. */
   catches: ArtifactCatch[];
   failedCards: FailedCard[];
+  answerCards: AnswerCard[];
   story: StoryView;
   /** The latest reshuffle, if any. */
   morph: WorldMorph | null;

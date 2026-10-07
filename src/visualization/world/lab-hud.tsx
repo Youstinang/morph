@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { BUDGET_ANSWER } from "@/state/fixtures/uae-market";
+import { useMemo, useState, type FormEvent, type Ref } from "react";
+import type { InputValue } from "@/state/input-controls";
 import { OBJECTIVE_LIMITS } from "@/state/plan";
 import { useWorkspace } from "@/state/react";
 import {
@@ -7,13 +7,13 @@ import {
   selectAgents,
   selectAssumptions,
   selectEvidence,
-  selectLatestAnswer,
   selectObjective,
   selectPendingInput,
   selectRecommendation,
   selectScenarios,
 } from "@/state/selectors";
 import { CORE_WORDS, STATE_WORDS, sentenceCase } from "./copy";
+import { InputPanel } from "./input-panel";
 import { AGENTS } from "./sim/roster";
 import type { AgentId, LogEntry } from "./sim/types";
 import type { LabSnapshot } from "./snapshot";
@@ -31,7 +31,10 @@ interface LabHudProps {
   onToggleLabels: () => void;
   onToggleQuality: () => void;
   onSelect: (id: AgentId | null) => void;
-  onConfirmBudget: () => void;
+  onAnswer: (requestId: string, value: InputValue) => void;
+  onSkip: (requestId: string) => void;
+  onEngageInput: () => void;
+  inputAnchor: Ref<HTMLElement>;
   onAsk: (objective: string) => void;
   onBackToDemo: () => void;
 }
@@ -55,13 +58,11 @@ export function LabHud(props: LabHudProps) {
   const recommendation = useWorkspace(selectRecommendation);
   const mode = useWorkspace((workspace) => workspace.mode);
   const pending = useWorkspace(selectPendingInput);
-  const answered = useWorkspace(selectLatestAnswer);
   const humanInputs = useWorkspace((workspace) => workspace.humanInputs);
   const cost = useWorkspace((workspace) => workspace.cost);
   const [asking, setAsking] = useState(false);
   const [draft, setDraft] = useState("");
   const live = mode === "real";
-  const questions = live ? humanInputs.filter((request) => request.status === "pending") : [];
   const draftReady = draft.trim().length >= OBJECTIVE_LIMITS.min;
 
   const submit = (event: FormEvent) => {
@@ -73,8 +74,7 @@ export function LabHud(props: LabHudProps) {
   };
 
   const selectedAgent = selected ? agents.find((agent) => agent.id === selected) : null;
-  const request = pending ?? answered;
-  const askingBudget = !live && (pending !== null || (answered !== null && snapshot.time - answered.answeredAt! < 3));
+  const position = pending ? { index: humanInputs.indexOf(pending), total: humanInputs.length } : null;
   const findings = useMemo(
     () => findingLines(evidence, assumptions, recommendation).slice(-MAX_FINDINGS),
     [evidence, assumptions, recommendation],
@@ -200,7 +200,7 @@ export function LabHud(props: LabHudProps) {
             </p>
           </section>
         )}
-        {(findings.length > 0 || scenarios.length > 0 || questions.length > 0) && (
+        {(findings.length > 0 || scenarios.length > 0) && (
           <section className="lab-findings" aria-label="What we know so far">
             <div className="lab-findings__list">
               <p className="section-label">{!live ? "What we know so far" : evidence.length > 0 ? "What the team thinks · AI knowledge, not checked" : "What the plan assumes"}</p>
@@ -212,18 +212,6 @@ export function LabHud(props: LabHudProps) {
                 ))}
               </ul>
             </div>
-            {questions.length > 0 && (
-              <div className="lab-options lab-questions">
-                <p className="lab-options__title">Nova would ask you · answering comes later</p>
-                <ul>
-                  {questions.map((request) => (
-                    <li key={request.id} data-kind="question">
-                      {request.question}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {scenarios.length > 0 && (
               <div className="lab-options">
                 <p className="lab-options__title">How the options compare</p>
@@ -253,28 +241,25 @@ export function LabHud(props: LabHudProps) {
         )}
       </div>
 
+      {pending && (
+        <InputPanel
+          key={pending.id}
+          request={pending}
+          position={position}
+          canSkip={live}
+          anchorRef={props.inputAnchor}
+          onAnswer={(value) => props.onAnswer(pending.id, value)}
+          onSkip={() => props.onSkip(pending.id)}
+          onEngage={props.onEngageInput}
+        />
+      )}
+
       <div className="lab-bottom">
-        {snapshot.caption && !askingBudget && (
+        {snapshot.caption && (
           <p key={snapshot.caption.id} className="lab-caption" aria-live="polite">
             <span className="lab-caption__dot" style={{ background: speakerColor(snapshot.caption) }} />
             {snapshot.caption.text}
           </p>
-        )}
-        {askingBudget && request && (
-          <section className="lab-input" aria-label="Your input">
-            <span className="lab-caption__dot" style={{ background: AGENTS.nova.look.accent }} />
-            <p className="lab-input__question">
-              <span>Nova asks:</span> {request.question}
-            </p>
-            <strong className="lab-input__value">{request.answer ?? BUDGET_ANSWER}</strong>
-            {pending ? (
-              <button type="button" className="action action-primary" onClick={props.onConfirmBudget}>
-                Confirm
-              </button>
-            ) : (
-              <span className="lab-input__done">Got it</span>
-            )}
-          </section>
         )}
       </div>
     </div>

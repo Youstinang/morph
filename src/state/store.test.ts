@@ -84,9 +84,39 @@ describe("workspace store", () => {
     const { s } = setup();
     expect(s().apply(op({ operation: "request_human_input", requestId: "budget", question: "How much?", askedBy: "nova" })).ok).toBe(true);
     expect(selectPendingInput(s().workspace)?.id).toBe("budget");
-    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", answer: "USD 1", source: { kind: "user" } })).ok).toBe(true);
-    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", answer: "USD 2", source: { kind: "user" } })).ok).toBe(false);
+    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", value: "USD 1", source: { kind: "user" } })).ok).toBe(true);
+    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", value: "USD 2", source: { kind: "user" } })).ok).toBe(false);
     expect(selectPendingInput(s().workspace)).toBeNull();
+  });
+
+  it("checks every answer against the question's control", () => {
+    const { s } = setup();
+    const user = { kind: "user" } as const;
+    const ask = (requestId: string, control: unknown) => s().apply(op({ operation: "request_human_input", requestId, question: "Q?", askedBy: "nova", control }));
+    const answer = (requestId: string, value: unknown) => s().apply(op({ operation: "answer_human_input", requestId, value, source: user }));
+    expect(ask("bad", { type: "slider", min: 5, max: 1 }).ok).toBe(false);
+    expect(ask("bad", { type: "single_choice", options: ["Only one"] }).ok).toBe(false);
+    expect(ask("bad", { type: "script", code: "alert(1)" }).ok).toBe(false);
+    expect(ask("money", { type: "currency", min: 0, max: 1000, currency: "EUR" }).ok).toBe(true);
+    expect(answer("money", 5000).ok).toBe(false);
+    expect(answer("money", "500").ok).toBe(false);
+    expect(answer("money", 500).ok).toBe(true);
+    expect(s().workspace.humanInputs.find((item) => item.id === "money")).toMatchObject({ answer: "EUR 500", value: 500 });
+    expect(ask("budget", { type: "slider", min: 250000, max: 1000000, currency: "USD", stops: [250000, 500000, 1000000] }).ok).toBe(true);
+    expect(answer("budget", 400000).ok).toBe(false);
+    expect(answer("budget", 1000000).ok).toBe(true);
+    expect(s().workspace.humanInputs.find((item) => item.id === "budget")?.answer).toBe("USD 1,000,000");
+    expect(ask("which", { type: "multi_choice", options: ["Talabat", "Careem", "Deliveroo"] }).ok).toBe(true);
+    expect(answer("which", ["Uber"]).ok).toBe(false);
+    expect(answer("which", ["Deliveroo", "Talabat"]).ok).toBe(true);
+    expect(s().workspace.humanInputs.find((item) => item.id === "which")?.answer).toBe("Talabat, Deliveroo");
+    expect(ask("ok", { type: "confirmation" }).ok).toBe(true);
+    expect(answer("ok", "yes").ok).toBe(false);
+    expect(answer("ok", true).ok).toBe(true);
+    expect(ask("later", { type: "percentage", min: 0, max: 100 }).ok).toBe(true);
+    expect(s().apply(op({ operation: "skip_human_input", requestId: "later", source: user })).ok).toBe(true);
+    expect(answer("later", 10).ok).toBe(false);
+    expect(s().workspace.humanInputs.find((item) => item.id === "later")?.status).toBe("skipped");
   });
 });
 

@@ -1,3 +1,4 @@
+import { TEXT_CONTROL, checkAnswer, type InputControl } from "./input-controls";
 import {
   AgentPatchSchema,
   ModulePatchSchema,
@@ -187,21 +188,37 @@ export function setRecommendation(ws: Workspace, recommendation: Omit<Recommenda
   return { ...ws, recommendation: parsed.data };
 }
 
-export function requestHumanInput(ws: Workspace, id: string, question: string, askedBy: string): Transition {
+export function requestHumanInput(ws: Workspace, id: string, question: string, askedBy: string, control: InputControl = TEXT_CONTROL): Transition {
   if (!id || !question.trim()) return "the question is empty";
   if (ws.humanInputs.some((item) => item.id === id)) return `request ${id} already exists`;
   return {
     ...ws,
-    humanInputs: [...ws.humanInputs, { id, question: question.trim(), askedBy, askedAt: ws.time, status: "pending", answer: null, answeredAt: null }],
+    humanInputs: [
+      ...ws.humanInputs,
+      { id, question: question.trim(), askedBy, askedAt: ws.time, control, status: "pending", answer: null, value: null, answeredAt: null },
+    ],
   };
 }
 
-export function answerHumanInput(ws: Workspace, id: string, answer: string): Transition {
+export function answerHumanInput(ws: Workspace, id: string, value: unknown): Transition {
   const target = ws.humanInputs.find((item) => item.id === id);
   if (!target) return `request ${id} does not exist`;
-  if (target.status !== "pending") return `request ${id} was already answered`;
-  if (!answer.trim() || answer.length > 200) return "the answer is empty or too long";
-  return { ...ws, humanInputs: ws.humanInputs.map((item) => (item.id === id ? { ...item, status: "answered", answer: answer.trim(), answeredAt: ws.time } : item)) };
+  if (target.status !== "pending") return `request ${id} was already ${target.status}`;
+  const checked = checkAnswer(target.control, value);
+  if (!checked.ok) return checked.reason;
+  return {
+    ...ws,
+    humanInputs: ws.humanInputs.map((item) =>
+      item.id === id ? { ...item, status: "answered", answer: checked.display, value: checked.value, answeredAt: ws.time } : item,
+    ),
+  };
+}
+
+export function skipHumanInput(ws: Workspace, id: string): Transition {
+  const target = ws.humanInputs.find((item) => item.id === id);
+  if (!target) return `request ${id} does not exist`;
+  if (target.status !== "pending") return `request ${id} was already ${target.status}`;
+  return { ...ws, humanInputs: ws.humanInputs.map((item) => (item.id === id ? { ...item, status: "skipped", answeredAt: ws.time } : item)) };
 }
 
 export function setFocus(ws: Workspace, focus: Focus): Transition {

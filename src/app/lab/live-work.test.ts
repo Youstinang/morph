@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { StepRequester } from "@/orchestration/live-question";
+import type { AnswerRequester, StepRequester } from "@/orchestration/live-question";
+import type { InputValue } from "@/state/input-controls";
 import { SAMPLE_PLAN } from "@/state/fixtures/sample-plan";
-import { AI_KNOWLEDGE_LABEL, LIVE_LIMITS, type AgentStep, type StepResponse } from "@/state/live-work";
+import { AI_KNOWLEDGE_LABEL, LIVE_LIMITS, type AgentStep, type AnswerRequest, type StepResponse } from "@/state/live-work";
 import type { PlanResponse } from "@/state/plan";
 import { coreState } from "@/visualization/world/sim/world";
 import { createLabSession, type LabRun } from "./lab-session";
@@ -30,6 +31,11 @@ const reply = (step: AgentStep): StepResponse => {
 function fakeServer(delay: number | ((step: AgentStep) => number) = 2, script: (step: AgentStep, call: number) => StepResponse | null = () => null) {
   const waiting: { due: number; resolve: () => void }[] = [];
   const calls: AgentStep[] = [];
+  const answers: AnswerRequest[] = [];
+  const requestAnswer: AnswerRequester = async (request) => {
+    answers.push(request);
+    return { ok: true };
+  };
   let inFlight = 0;
   let maxInFlight = 0;
   let clock = () => 0;
@@ -48,6 +54,8 @@ function fakeServer(delay: number | ((step: AgentStep) => number) = 2, script: (
     });
   return {
     requestStep,
+    requestAnswer,
+    answers,
     calls,
     maxInFlight: () => maxInFlight,
     bind: (session: LabRun) => (clock = () => session.run.time),
@@ -60,15 +68,27 @@ function fakeServer(delay: number | ((step: AgentStep) => number) = 2, script: (
   };
 }
 
-function setup(server = fakeServer()) {
-  const session = createLabSession({ requestPlan: async () => PLANNED, requestStep: server.requestStep });
+/** How each test's user replies to Nova's question, as soon as it shows; null leaves it open. */
+const replying = new WeakMap<LabRun, InputValue | "skip" | null>();
+
+function setup(server = fakeServer(), reply: InputValue | "skip" | null = 40) {
+  const session = createLabSession({ requestPlan: async () => PLANNED, requestStep: server.requestStep, requestAnswer: server.requestAnswer });
   server.bind(session);
+  replying.set(session, reply);
   session.startLive(QUESTION);
   return { session, server };
 }
 
+const pendingQuestion = (s: LabRun) => s.store.getState().workspace.humanInputs.find((item) => item.status === "pending") ?? null;
+
 async function play(session: LabRun, server: ReturnType<typeof fakeServer>, seconds: number, until?: (s: LabRun) => boolean, each?: () => void) {
   for (let i = 0; i < seconds / DT; i += 1) {
+    const reply = replying.get(session);
+    const open = pendingQuestion(session);
+    if (open && reply !== null && reply !== undefined) {
+      if (reply === "skip") session.skipInput(open.id);
+      else session.answerInput(open.id, reply);
+    }
     session.run.step(DT);
     server.tick(session.run.time);
     for (let k = 0; k < 6; k += 1) await Promise.resolve();
@@ -96,15 +116,19 @@ describe("live question: the team works", () => {
     expect(maxWorking).toBeLessThanOrEqual(LIVE_LIMITS.concurrency);
 
     const record = ws(session);
-    expect(record.evidence).toHaveLength(4);
-    for (const item of record.evidence) expect(item.source).toEqual({ kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false });
-    expect(record.evidence.map((item) => item.foundBy).sort()).toEqual(["orion", "sage", "sage", "vex"]);
+    expect(record.evidence).toHaveLength(5);
+    const model = record.evidence.filter((item) => item.foundBy !== "user");
+    for (const item of model) expect(item.source).toEqual({ kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false });
+    expect(model.map((item) => item.foundBy).sort()).toEqual(["orion", "sage", "sage", "vex"]);
+    const yours = record.evidence.find((item) => item.foundBy === "user")!;
+    expect(yours).toMatchObject({ statement: "How many extra orders a day can the kitchen handle: 40 orders.", source: { kind: "user", verified: true } });
     expect(record.evidence.find((item) => item.statement.startsWith("Demand is there"))).toMatchObject({ foundBy: "sage", moduleId: null });
     expect(record.modules[record.moduleOrder[0]!]!.summary).toEqual({ headline: "Headline 1", detail: "In short" });
     expect(record.assumptions[0]).toMatchObject({ status: "challenged", challenge: { by: "vex", note: "Listing on an app may need paperwork first." } });
     expect(record.recommendation).toMatchObject({ status: "final", statement: "Try one app for a month", confidence: "low" });
     const byTask = (n: number) => record.evidence.find((item) => item.statement.includes(`Finding ${n} `))!.id;
-    expect(record.recommendation!.evidenceIds).toEqual([byTask(1), byTask(2)]);
+    expect(record.recommendation!.evidenceIds).toEqual([byTask(1), byTask(2), yours.id]);
+    expect(server.answers).toEqual([{ runId: "run-test-0001", question: 0, reply: { kind: "answer", value: 40 } }]);
     expect(record.objective?.status).toBe("answered");
     expect(record.cost.modelCalls).toBe(7);
     for (const agent of Object.values(record.agents)) expect(agent.state).toBe("idle");
@@ -112,7 +136,8 @@ describe("live question: the team works", () => {
 
     const events = cycleEvents(session);
     expect(events.filter((e) => e.type === "operation_rejected")).toEqual([]);
-    expect(events.filter((e) => e.type === "evidence_discovered").every((e) => e.operation?.source.kind === "model")).toBe(true);
+    const discovered = events.filter((e) => e.type === "evidence_discovered");
+    expect(discovered.map((e) => e.operation?.source.kind).sort()).toEqual(["model", "model", "model", "model", "user"]);
     const order = events.map((e) => e.type);
     expect(order.indexOf("synthesis_started")).toBeGreaterThan(order.lastIndexOf("evidence_discovered"));
     expect(order.indexOf("assumption_challenged")).toBeLessThan(order.indexOf("synthesis_started"));
@@ -173,7 +198,7 @@ describe("live question: the team works", () => {
     expect(orion.has("failed")).toBe(true);
     expect(orion.has("retrying")).toBe(true);
     expect(server.calls.filter((step) => step.kind === "research" && step.task === 0)).toHaveLength(2);
-    expect(ws(session).evidence).toHaveLength(4);
+    expect(ws(session).evidence.filter((item) => item.foundBy !== "user")).toHaveLength(4);
     expect(session.run.live?.phase).toBe("answered");
   });
 
@@ -203,8 +228,51 @@ describe("live question: the team works", () => {
     await play(session, server, 120, (s) => s.run.live?.phase === "waiting");
     expect(server.calls.every((step) => step.kind === "research")).toBe(true);
     expect(server.calls).toHaveLength(SAMPLE_PLAN.tasks.length * (LIVE_LIMITS.retries + 1));
-    expect(ws(session).evidence).toEqual([]);
+    expect(ws(session).evidence.filter((item) => item.foundBy !== "user")).toEqual([]);
     expect(cycleEvents(session).some((e) => e.type === "synthesis_started")).toBe(false);
+  });
+
+  it("holds Vex's review until you answer Nova, without the wait counting against the team", async () => {
+    const server = fakeServer(1);
+    const { session } = setup(server, null);
+    await play(session, server, 300);
+    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine"]);
+    expect(session.run.live?.phase).toBe("working");
+    expect(ws(session).agents.vex).toMatchObject({ state: "waiting", task: "waiting for your answer to Nova" });
+    expect(ws(session).agents.nova!.task).toBe("waiting for your answer");
+    expect(session.world.story.openInputs).toEqual([{ requestId: pendingQuestion(session)!.id, askedBy: "nova" }]);
+
+    const open = pendingQuestion(session)!;
+    expect(open.control).toEqual({ type: "number", min: 0, max: 500, unit: "orders" });
+    expect(session.answerInput(open.id, 9000)).toBe(false);
+    expect(session.answerInput(open.id, "forty")).toBe(false);
+    expect(pendingQuestion(session)?.id).toBe(open.id);
+    expect(session.answerInput(open.id, 25)).toBe(true);
+    expect(session.answerInput(open.id, 30)).toBe(false);
+    expect(session.world.story.openInputs).toEqual([]);
+    expect(session.world.answerCards).toHaveLength(1);
+
+    await play(session, server, 120, (s) => s.run.live?.phase === "answered");
+    expect(session.run.live?.phase).toBe("answered");
+    expect(server.calls.map((step) => step.kind).slice(-2)).toEqual(["critique", "synthesis"]);
+    expect(server.answers.map((item) => item.reply)).toEqual([{ kind: "answer", value: 25 }]);
+    const answered = cycleEvents(session).find((e) => e.type === "human_input_received");
+    expect(answered).toMatchObject({ source: "user", answeredBy: "user", answer: "25 orders" });
+    expect(ws(session).humanInputs[0]).toMatchObject({ status: "answered", answer: "25 orders", value: 25 });
+    expect(cycleEvents(session).filter((e) => e.type === "operation_rejected")).toEqual([]);
+  });
+
+  it("goes on without your answer when you skip, and says so", async () => {
+    const server = fakeServer(1);
+    const { session } = setup(server, "skip");
+    await play(session, server, 120, (s) => s.run.live?.phase === "answered");
+    expect(session.run.live?.phase).toBe("answered");
+    expect(server.answers.map((item) => item.reply)).toEqual([{ kind: "skip" }]);
+    expect(ws(session).humanInputs[0]).toMatchObject({ status: "skipped", answer: null });
+    expect(ws(session).evidence.some((item) => item.foundBy === "user")).toBe(false);
+    const skipped = cycleEvents(session).find((e) => e.type === "human_input_skipped");
+    expect(skipped).toMatchObject({ source: "user", skippedBy: "user", summary: "You skipped Nova's question; the team goes on without it." });
+    expect(session.world.answerCards).toHaveLength(0);
   });
 
   it("cancels the work in flight when the user goes back to the demo", async () => {

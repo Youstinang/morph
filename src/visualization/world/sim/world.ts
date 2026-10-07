@@ -11,6 +11,9 @@ export const HANDOFF_SECONDS = 1.6;
 /** How long a catch pulse and a cleared failed card stay visible. */
 export const CATCH_SECONDS = 1.2;
 export const CARD_FADE_SECONDS = 1.5;
+/** An answer card's flight into the Core, then its landing glow. */
+export const ANSWER_FLIGHT_SECONDS = 1.4;
+export const ANSWER_GLOW_SECONDS = 1.2;
 
 /** Publishes a physical report (arrival, landed handoff) back onto the bus. */
 export type WorldReport = (draft: EventDraft) => void;
@@ -25,7 +28,7 @@ const emptyStory = (): StoryView => ({
   challengeOpen: false,
   synthesisAt: null,
   answeredAt: null,
-  budgetPending: false,
+  openInputs: [],
   scenarios: null,
   waitingAt: null,
   failedAt: null,
@@ -48,7 +51,7 @@ export function createWorld(cycle = 0): World {
       facingAgent: null,
     };
   }
-  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], catches: [], failedCards: [], story: emptyStory(), morph: null };
+  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], catches: [], failedCards: [], answerCards: [], story: emptyStory(), morph: null };
 }
 
 const isAgent = (world: World, id: string): id is AgentId => id in world.agents;
@@ -203,11 +206,18 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
       if (event.recommendation.status === "final") story.answeredAt = world.time;
       return;
     case "human_input_requested":
-      story.budgetPending = true;
+      if (isAgent(world, event.askedBy)) story.openInputs = [...story.openInputs, { requestId: event.requestId, askedBy: event.askedBy }];
       return;
     case "human_input_received":
-      story.budgetPending = false;
+    case "human_input_skipped": {
+      const asked = story.openInputs.find((item) => item.requestId === event.requestId);
+      story.openInputs = story.openInputs.filter((item) => item !== asked);
+      if (asked && event.type === "human_input_received") {
+        const [x, z] = world.agents[asked.askedBy].position;
+        world.answerCards.push({ from: [x, z], startedAt: world.time });
+      }
       return;
+    }
     case "scenario_created":
     case "scenario_updated":
       story.scenarios = { ...story.scenarios, [event.scenario.id]: event.scenario.assessment } as ScenarioWeights;
@@ -378,6 +388,8 @@ export function stepWorld(world: World, dt: number, report: WorldReport): void {
       report({ type: "artifact_handoff_completed", artifactId: artifact.id, kind: artifact.kind, from: artifact.from, to: artifact.to });
     }
   }
+  const answerLife = ANSWER_FLIGHT_SECONDS + ANSWER_GLOW_SECONDS;
+  if (world.answerCards.some((card) => world.time - card.startedAt > answerLife)) world.answerCards = world.answerCards.filter((card) => world.time - card.startedAt <= answerLife);
   if (world.catches.some((c) => world.time - c.at > CATCH_SECONDS)) world.catches = world.catches.filter((c) => world.time - c.at <= CATCH_SECONDS);
   if (world.failedCards.some((card) => card.clearedAt !== null && world.time - card.clearedAt > CARD_FADE_SECONDS)) {
     world.failedCards = world.failedCards.filter((card) => card.clearedAt === null || world.time - card.clearedAt <= CARD_FADE_SECONDS);
@@ -403,8 +415,9 @@ export function scenarioWeights(world: World): ScenarioWeights | null {
   return world.story.scenarios;
 }
 
-export function budgetPending(world: World): boolean {
-  return world.story.budgetPending;
+/** Who is waiting on the user for an answer, if anyone. */
+export function askingAgent(world: World): AgentId | null {
+  return world.story.openInputs[0]?.askedBy ?? null;
 }
 
 export function moduleHeadline(world: World, id: ModuleId): ModuleHeadline | null {

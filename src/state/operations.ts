@@ -9,6 +9,7 @@ import {
   type Workspace,
   type WorkspaceModule,
 } from "./domain";
+import { InputControlSchema, InputValueSchema } from "./input-controls";
 import * as t from "./transitions";
 
 /**
@@ -60,8 +61,9 @@ export const MorphOperationSchema = z.discriminatedUnion("operation", [
   op("update_scenario", { scenarioId: Id, assessment: z.number().min(0).max(1), label: Line(60).optional() }),
   op("update_recommendation", { recommendation: RecommendationSchema.omit({ updatedAt: true }).strict() }),
 
-  op("request_human_input", { requestId: Id, question: Line(600), askedBy: Id }),
-  op("answer_human_input", { requestId: Id, answer: Line(200) }),
+  op("request_human_input", { requestId: Id, question: Line(600), askedBy: Id, control: InputControlSchema.optional() }),
+  op("answer_human_input", { requestId: Id, value: InputValueSchema }),
+  op("skip_human_input", { requestId: Id }),
 
   op("assign_agent", { agentId: Id, task: Line(200), moduleId: Id.nullable() }),
   op("focus_camera", { target: FocusSchema }),
@@ -179,9 +181,11 @@ function transition(ws: Workspace, o: MorphOperation): t.Transition {
     case "update_recommendation":
       return t.setRecommendation(ws, o.recommendation);
     case "request_human_input":
-      return t.requestHumanInput(ws, o.requestId, o.question, o.askedBy);
+      return t.requestHumanInput(ws, o.requestId, o.question, o.askedBy, o.control);
     case "answer_human_input":
-      return untrusted ? "only the user (or the demo's autoplay) can answer a question for the user" : t.answerHumanInput(ws, o.requestId, o.answer);
+      return untrusted ? "only the user (or the demo's autoplay) can answer a question for the user" : t.answerHumanInput(ws, o.requestId, o.value);
+    case "skip_human_input":
+      return untrusted ? "only the user can skip a question for the user" : t.skipHumanInput(ws, o.requestId);
     case "assign_agent": {
       if (!ws.agents[o.agentId]) return `agent ${o.agentId} does not exist`;
       const started = t.startTask(ws, o.agentId, o.task, o.moduleId);

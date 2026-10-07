@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BUDGET_STOPS, ENDINGS, ENDING_FOR, RECOMMENDATION } from "@/state/fixtures/uae-market";
 import { UAE_TIMELINE } from "@/state/fixtures/uae-market";
 import { DEMO_SCRIPT } from "@/orchestration/demo/script";
 import { LOOP_RESTART_DELAY } from "@/orchestration/run-controller";
@@ -77,13 +78,49 @@ describe("deterministic demo run", () => {
     const { session } = runUntil(createLabSession(), (s) => signal(s, "budget-request") !== undefined);
     expect(signal(session, "budget")).toBeUndefined();
     expect(session.world.agents.nova.state).toBe("waiting");
-    expect(session.world.story.budgetPending).toBe(true);
-    expect(session.answerBudget()).toBe(true);
-    expect(session.answerBudget()).toBe(false);
+    expect(session.world.story.openInputs).toEqual([{ requestId: "budget", askedBy: "nova" }]);
+    expect(session.answerInput("budget", 400_000)).toBe(false);
+    expect(session.answerInput("budget", 500_000)).toBe(true);
+    expect(session.answerInput("budget", 500_000)).toBe(false);
     expect(signal(session, "budget")).toBe(session.world.time);
     const answer = cycleEvents(session).find((event) => event.type === "human_input_received")!;
     expect(answer).toMatchObject({ source: "user", answeredBy: "user" });
-    expect(session.world.story.budgetPending).toBe(false);
+    expect(session.world.story.openInputs).toEqual([]);
+    expect(session.world.answerCards).toHaveLength(1);
+  });
+
+  it("plays a different, complete ending for each budget on the slider", () => {
+    const outcomes = new Map<number, { statement: string | null; assumption: string; weights: number[] }>();
+    for (const budget of BUDGET_STOPS) {
+      const session = createLabSession();
+      runUntil(session, (s) => signal(s, "budget-request") !== undefined);
+      expect(session.answerInput("budget", budget)).toBe(true);
+      runUntil(session, ended);
+      const record = session.store.getState().workspace;
+      const ending = ENDINGS[ENDING_FOR[budget]!];
+      expect(record.recommendation).toMatchObject({ status: "final", statement: ending.statement, reason: ending.reason });
+      expect(record.evidence.find((item) => item.id === "ev-budget")?.statement).toBe(`Your launch budget is capped at ${ending.budget}.`);
+      expect(record.humanInputs[0]).toMatchObject({ status: "answered", answer: ending.budget, value: budget });
+      expect(cycleEvents(session).filter((event) => event.type === "operation_rejected")).toEqual([]);
+      outcomes.set(budget, {
+        statement: record.recommendation!.statement,
+        assumption: record.assumptions[0]!.status,
+        weights: record.scenarios.map((scenario) => scenario.assessment),
+      });
+    }
+    expect(new Set([...outcomes.values()].map((o) => o.statement)).size).toBe(3);
+    expect(outcomes.get(250_000)!.weights).toEqual([0.08, 0.58, 0.34]);
+    expect(outcomes.get(1_000_000)).toMatchObject({ assumption: "confirmed", weights: [0.54, 0.34, 0.12] });
+    expect(outcomes.get(500_000)).toMatchObject({ statement: RECOMMENDATION, assumption: "rejected" });
+  });
+
+  it("leaves the budget to the user once they start on it", () => {
+    const { session } = runUntil(createLabSession(), (s) => signal(s, "budget-request") !== undefined);
+    session.holdInput();
+    runUntil(session, (s) => s.world.time > signal(s, "budget-request")! + 20, 40);
+    expect(signal(session, "budget")).toBeUndefined();
+    expect(session.answerInput("budget", 250_000)).toBe(true);
+    expect(cycleEvents(session).find((event) => event.type === "human_input_received")).toMatchObject({ source: "user", answer: "USD 250,000" });
   });
 
   it("auto-answers the budget in autoplay, marked as the demo rather than the user", () => {

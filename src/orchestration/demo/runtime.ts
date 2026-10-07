@@ -1,8 +1,9 @@
 import type { EventBus } from "@/events/bus";
 import type { AgentTarget, EventDraft } from "@/events/schema";
 import type { AgentState, Provenance } from "@/state/domain";
-import { END_OF_RUN_WHY, HUMAN_INPUTS, UAE_TIMELINE, isOperation } from "@/state/fixtures/uae-market";
+import { END_OF_RUN_WHY, ENDING_FOR, HUMAN_INPUTS, UAE_TIMELINE, isOperation, timelineFor, type StoryBeat } from "@/state/fixtures/uae-market";
 import type { OperationGate } from "@/state/gate";
+import { checkAnswer } from "@/state/input-controls";
 import { TEAM_ORDER, type TeamAgentId } from "@/state/team";
 import { BUDGET_AUTO_CONFIRM_SECONDS, DEMO_SCRIPT, type DemoAction, type DemoTarget } from "./script";
 
@@ -33,8 +34,13 @@ interface Cursor {
 
 export interface DemoRuntime {
   step(dt: number): void;
-  /** Answers a pending human-input request; returns false if nothing is waiting for it. */
-  answer(requestId: keyof typeof HUMAN_INPUTS, by: "user" | "autoplay"): boolean;
+  /**
+   * Answers a pending human-input request with a value its control accepts; returns false if nothing is
+   * waiting for it or the value doesn't fit. The budget picks the story's ending.
+   */
+  answer(requestId: string, value: unknown, by: "user" | "autoplay"): boolean;
+  /** The user has started on the question, so autoplay leaves it to them. */
+  hold(): void;
   readonly endedAt: number | null;
   readonly signals: ReadonlyMap<string, number>;
   dispose(): void;
@@ -62,6 +68,8 @@ export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () =>
   }
   let endedAt: number | null = null;
   let dissolved = false;
+  let held = false;
+  let timeline: Record<string, StoryBeat> = UAE_TIMELINE;
 
   const publish = (draft: EventDraft, source: "demo" | "user" = "demo") => bus.publish(draft, source);
 
@@ -75,7 +83,7 @@ export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () =>
   function emit(signal: string) {
     if (signals.has(signal)) return;
     signals.set(signal, now());
-    const beat = UAE_TIMELINE[signal];
+    const beat = timeline[signal];
     if (!beat) return;
     const as: Provenance = beat.user ? { kind: "user" } : beat.by ? { kind: "demo", agentId: beat.by } : { kind: "demo" };
     beat.items.forEach((item, i) => {
@@ -219,11 +227,15 @@ export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () =>
     }),
   ];
 
-  function answer(requestId: keyof typeof HUMAN_INPUTS, by: "user" | "autoplay") {
-    if (!signals.has(`${requestId}-request`) || signals.has(requestId)) return false;
-    const input = HUMAN_INPUTS[requestId];
+  function answer(requestId: string, value: unknown, by: "user" | "autoplay") {
+    if (!(requestId in HUMAN_INPUTS) || !signals.has(`${requestId}-request`) || signals.has(requestId)) return false;
+    const input = HUMAN_INPUTS[requestId as keyof typeof HUMAN_INPUTS];
     const as: Provenance = by === "user" ? { kind: "user" } : { kind: "demo", label: "autoplay" };
-    if (!propose({ operation: "answer_human_input", id: `c${cycle}-${requestId}-answer`, requestId, answer: input.answer }, as, input.answeredSummary)) return false;
+    const checked = checkAnswer(input.control, value);
+    if (!checked.ok) return false;
+    const summary = input.answeredSummary(checked.display);
+    if (!propose({ operation: "answer_human_input", id: `c${cycle}-${requestId}-answer`, requestId, value: checked.value }, as, summary)) return false;
+    timeline = timelineFor(ENDING_FOR[checked.value as number] ?? "mid");
     emit(requestId);
     return true;
   }
@@ -233,7 +245,7 @@ export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () =>
       const time = now();
       if (time >= OBJECTIVE_AT) emit("objective");
       const requestedAt = signals.get("budget-request");
-      if (requestedAt !== undefined && time - requestedAt >= BUDGET_AUTO_CONFIRM_SECONDS) answer("budget", "autoplay");
+      if (requestedAt !== undefined && !held && time - requestedAt >= BUDGET_AUTO_CONFIRM_SECONDS) answer("budget", HUMAN_INPUTS.budget.autoplay, "autoplay");
       for (const id of TEAM_ORDER) run(id, dt);
       if (endedAt === null && TEAM_ORDER.every((id) => cursors[id].done)) endedAt = time;
       if (!dissolved && endedAt !== null && time - endedAt >= restartDelay - DISSOLVE_LEAD) {
@@ -244,6 +256,9 @@ export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () =>
       }
     },
     answer,
+    hold: () => {
+      held = true;
+    },
     get endedAt() {
       return endedAt;
     },

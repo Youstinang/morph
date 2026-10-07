@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { InputControlSchema, InputValueSchema } from "./input-controls";
 
 /**
  * Canonical workspace model. It holds facts only; motion (positions, routes, facing) belongs to the world
@@ -145,8 +146,12 @@ export const HumanInputRequestSchema = z.object({
   question: Text,
   askedBy: Id,
   askedAt: Time,
-  status: z.enum(["pending", "answered"]),
+  /** The trusted control the user answers with. */
+  control: InputControlSchema,
+  status: z.enum(["pending", "answered", "skipped"]),
+  /** How the answer reads, and its raw value. */
   answer: z.string().min(1).max(200).nullable(),
+  value: InputValueSchema.nullable(),
   answeredAt: Time.nullable(),
 });
 export type HumanInputRequest = z.infer<typeof HumanInputRequestSchema>;

@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 15 — Collaboration, handoff, failure and retry visuals (authorized 2026-10-07: "remove any limitation and go for phase 15"); complete, visually approved 2026-10-07
+Phase 16 — Human-in-loop controls (authorized 2026-10-07: "next phase"); implemented and validated, awaiting visual approval
 
 ## Status
-Complete — the user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Awaiting visual approval — Phase 16 is implemented and validated; it is marked Complete only after the user approves how it looks. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -30,6 +30,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 13 — Deterministic demo runtime: the run controller, demo runtime and live question run live in `src/orchestration` on a fixed-step clock; the 3D world attaches to the run.
 - Phase 14 — Agent orchestration: after planning, live questions continue. Agents work their tasks two at a time with model calls, Vex challenges the weakest point, and Lume and Nova give a labelled tentative answer, all within per-question limits enforced by the server.
 - Phase 15 — Collaboration, handoff, failure and retry visuals (visually approved 2026-10-07).
+- Phase 16 — Human-in-loop controls (implemented; awaiting visual approval).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -158,6 +159,15 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - The server enforces the new steps: each one runs at most once; a re-check needs a critique that named a real finding; the browser never names the task to re-check, the server takes it from Vex's critique.
   - Demo timing: Sage now waits for Vex to arrive at Costs, so the demo's "Teaming up" hologram always has two agents in it.
   - No new dependency.
+- 2026-10-07, Phase 16: the user chose:
+  - where questions appear (**in the world**): a glowing panel floating beside the agent who asks (Nova), joined to her by a thin light thread, with a ring at her feet while she waits. The real control sits on the panel. When the user sends, a warm-white answer card flies from Nova into the Core, and the Core gives off one glow ring. On screens 900 px wide or less the panel docks at the bottom of the screen instead.
+  - what live questions do while waiting (**keep working**): research carries on and Sage combines the findings, but Vex's review and the final answer wait until every question is answered or skipped. Vex shows "waiting for your answer to Nova". The time limit for the question is paused while it waits only on the user. The user can skip; the answer then says briefly what it doesn't account for.
+  - the demo (**three endings**): Nova's budget is a slider with three stops (USD 250,000, 500,000, 1,000,000). Each stop plays its own scripted, offline ending: a 3-month runway, "start small with a local partner"; the original 6-month story; a 12-month runway, "go in alone, with UAE data hosting", with the assumption confirmed and a different main risk. If the user doesn't touch it, the demo picks USD 500,000 after 5 s (was 3.5 s); once they touch the panel, it waits for them.
+  - Controls (`src/state/input-controls.ts`): text, number, currency, percentage, slider (with optional fixed stops), single choice, multiple choice and yes/no, each with a Zod schema (ranges checked, choices unique) and one shared check for answers (`checkAnswer`) used by the record, the demo, the browser and the server. The record stores each question's control, its status (`pending`, `answered`, `skipped`), the answer as typed and as displayed.
+  - The planner picks a control for each question from a short, constrained list (type, up to 5 choices, minimum, maximum, unit). MORPH turns it into a trusted control (`planControl`); anything that doesn't fit becomes a plain text box. The model never writes the control's markup.
+  - Operations: `answer_human_input` now carries a typed `value`; new `skip_human_input` and event `human_input_skipped`. Only the user may answer or skip; the model and the orchestrator are refused.
+  - Live answers: the browser records the answer as the user's, adds it as the user's own evidence ("Your answer", a constraint), and sends it to the new `/api/answer` route. The server checks it against the question's control and stores it in the question's record once. The review and answer prompts quote the user's answers as given facts. The answer and the question text are never logged.
+  - No new dependency.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -284,6 +294,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Reduced motion: the hologram stops spinning and bobbing, its data dots stand still, and the warning sign stops pulsing (in code; not checked in the browser).
   - Key safety: the production build contains neither key; `.env.local` stays git-ignored.
   - Previews: `p15-handoff-live.png`, `p15-brief-live.png`, `p15-failure.png`, `p15-retry.png`, `p15-collab-costs.png`, `p15-flag.png`, `p15-core.png`, `p15-phone.png`.
+- Phase 16 human-in-loop pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass (`/api/answer` is a dynamic route). Tests: 163 in 22 files.
+  - New and updated tests: every control type checks its answers (out of range, not on a stop, unknown choice, wrong kind); a model can't answer or skip for the user; the demo plays a different, complete ending for each slider stop and refuses a budget between stops; once the user touches the panel the demo stops auto-answering; the planner's control requests convert to trusted controls or fall back to a text box; `/api/answer` stores an answer once, puts it in the answer's prompt, and refuses bad values (422), repeats (409), unknown questions (404), unreadable or extra fields (400), oversized bodies (413) and too many requests (429); live runs hold Vex's review until the user answers, cite the user's answer in the final answer, and go on without it when skipped.
+  - Demo in Chrome at 1440×900: the panel appears beside Nova at about 24 s; the slider moves between the three stops by keyboard; the Send button names the value; the answer card flies to the Core; the low and high endings each reach their own answer at about 58 s; 61 FPS; no console errors. Phone (390×844): the panel docks at the bottom; 61 FPS. Reduced motion: the panel and Core glow appear without the flight; 61 FPS.
+  - Real model (bakery question): the planner asked two questions, a currency field in Egyptian pounds and a choice of trial length (2 weeks to 6 months). The team researched while the panel was open; Vex reviewed only after both answers; the final answer named both answers. A run that skipped both said the answer doesn't set a budget or trial length. About USD 0.0026 and 9 calls per question; no console errors.
+  - Found and fixed: Nova showed "Done" for a few seconds after asking, while she handed out tasks; she now shows "Waiting" as soon as she asks.
+  - Key safety: the production build contains neither key; `.env.local` stays git-ignored.
+  - Previews: `p16-budget-panel.png`, `p16-answer-to-core.png`, `p16-low-budget-ending.png`, `p16-high-budget-ending.png`, `p16-phone-dock.png`, `p16-live-question.png`, `p16-live-answer.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -301,8 +319,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - The OpenAI and Anthropic keys pasted in chat must be revoked and replaced in `.env.local`.
 - Handoffs between agents standing close together (for example at the Core) are short, so the card's flight is brief.
 - In a live run, a re-check happens only when Vex doubts a specific finding; often he doubts an assumption instead.
-- The architecture audit after Phases 13–15 is due before the next phase's work.
-- Live findings are the model's general knowledge, not research: there are no search or source tools yet (Phase 20). They are labelled and never verified. Nova's questions can't be answered yet (Phase 16), so the answer can't use them.
+- When the planner asks for a number in a unit like "months", the control has no upper limit the user can see; the panel shows only the unit.
+- The demo's slider only offers three budgets; any other amount is refused, because each budget has its own scripted ending.
+- In live mode, an answer that fails to reach the server is kept on screen and noted ("Your answer didn't reach the team"), and the answer goes on without it.
+- Live findings are the model's general knowledge, not research: there are no search or source tools yet (Phase 20). They are labelled and never verified. The user's own answers to Nova are recorded as the user's evidence, not as research.
 - Each question's record lives in one server process's memory: a restart, or a second server instance, forgets it, and the next step gets "this question has expired; ask it again" (shared storage would come with hosting, Phase 26).
 - An agent with two tasks in one plan isn't possible (the planner tidies it away), so the scheduler doesn't handle one agent at two stations.
 - Once answered, live mode stays on screen; "Back to demo" or a new question leaves it.
@@ -347,7 +367,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 
 ## Audit 2026-10-07 (after Phases 13–15)
 - No Critical or High findings.
-- Medium, open: `src/orchestration/live-question.ts` (about 530 lines) now holds planning, the work schedule, handoffs, arrivals and results for live questions. Ownership is clear and it is tested, but it is the place most likely to grow; split the result handling out if Phase 16 adds much more.
+- Medium, partly addressed in Phase 16: the question handling moved to `src/orchestration/live-inputs.ts`; `live-question.ts` is now about 570 lines. `src/orchestration/live-question.ts` (about 530 lines at the audit) now holds planning, the work schedule, handoffs, arrivals and results for live questions. Ownership is clear and it is tested, but it is the place most likely to grow; split the result handling out if Phase 16 adds much more.
 - Medium, open (for Phase 24, security): `/api/agent-step` shares `/api/plan`'s open `X-Forwarded-For` and content-type weaknesses. With the raised limits, one question is capped at USD 0.05, and the hourly server cap (60 questions) bounds the worst case at about USD 3 per hour per server process.
 - Low: step results are cast to their type in `live-question.ts`; each reply is validated with Zod and checked to be for the step asked, so the casts are safe at runtime. A few guarded `as AgentId` casts remain in the demo runtime. Left as is.
 - Boundaries: lint enforces that the visualization layer imports no orchestration, server or configuration code; the new Phase 15 visuals read only the world. Dependencies: none added since Phase 9; production audit clean. Performance: 58–60 FPS with the new effects; their geometry and materials are disposed on unmount. Secrets: neither key is in the production build. Demo leakage: the demo makes no network or model calls (tested).
@@ -358,7 +378,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 16 — Human-in-loop controls, once the user authorizes it, preceded by the audit due after Phases 13–15.
+Phase 17 — Possibility Engine, once the user visually approves Phase 16 and authorizes the next phase. The next architecture audit is due after about Phase 18.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

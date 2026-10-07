@@ -56,7 +56,7 @@ Every event has `seq` (strictly increasing per bus), `at` (seconds on the run cl
 | Artifacts | `artifact_handoff_started`, `artifact_handoff_completed` |
 | Tools | `tool_started`, `tool_completed`, `tool_failed` (defined; first used by real tools) |
 | Evidence and assumptions | `evidence_discovered`, `evidence_removed`, `assumption_created`, `assumption_challenged`, `assumption_resolved` |
-| Human input | `human_input_requested`, `human_input_received` |
+| Human input | `human_input_requested`, `human_input_received`, `human_input_skipped` |
 | Scenarios and outcome | `scenario_created`, `scenario_updated`, `recommendation_updated`, `synthesis_started`, `synthesis_completed` |
 | Operations | `task_assigned`, `camera_focus_requested`, `operation_rejected` |
 
@@ -96,7 +96,7 @@ Events reference agents, modules, evidence and assumptions by id. Modules carry 
 | `sources_checked` | The station's source indicators and the archive towers fill |
 | `objective_received`, `plan_created`, `assumption_challenged`, `assumption_resolved`, `synthesis_started`, final `recommendation_updated` | The Intent Core changes mood (listening, delegating, uncertain, converging, completed) |
 | `scenario_created` / `scenario_updated` | The Possibility Engine's branches change weight |
-| `human_input_requested` / `human_input_received` | The budget cue appears and clears |
+| `human_input_requested` / `human_input_received` / `human_input_skipped` | The question panel and the ring at the asker's feet appear; an answer sends a card from the asker into the Core, which glows once; a skip just clears them |
 | `run_waiting` / `run_failed` | The Intent Core turns to "waiting for research" (soft amber, slow) or "something went wrong" (red) |
 
 Visual timing (walk speed, the assignment pause, flight duration, materialize and dissolve, glide and carry durations) stays in the world layer. With reduced motion, stations fade between places and the sweep is skipped; the events and resulting state are identical.
@@ -111,7 +111,7 @@ A `MorphOperation` (`src/state/operations.ts`) is a proposed change to the canon
 | Modules | `add_module` (optionally `reserve`), `update_module`, `move_module`, `resize_module`, `emphasize_module`, `deemphasize_module`, `remove_module` |
 | Evidence and assumptions | `add_evidence`, `remove_evidence` (optionally superseded by another item), `add_assumption`, `challenge_assumption`, `update_assumption` |
 | Scenarios and answer | `add_scenario`, `update_scenario`, `update_recommendation` |
-| People and view | `request_human_input`, `answer_human_input`, `assign_agent`, `focus_camera` |
+| People and view | `request_human_input`, `answer_human_input`, `skip_human_input`, `assign_agent`, `focus_camera` |
 
 Every operation has an `id`, a `source` (provenance: user, demo, orchestrator or model, with an optional agent and label) and an optional `why` (reason, evidence ids, assumption, agent). `applyMorphOperation(workspace, input)` is pure and deterministic. It returns the new workspace or a refusal with a reason, and a refusal leaves the workspace untouched. It refuses:
 
@@ -123,6 +123,8 @@ Every operation has an `id`, a `source` (provenance: user, demo, orchestrator or
 - removing evidence that the answer cites or that settled an assumption; a recommendation citing evidence that isn't accepted; a final recommendation without a statement and reason.
 
 Text stays text: the HUD renders it as plain strings, never as HTML.
+
+**Questions for the user (Phase 16).** `request_human_input` carries a trusted control (`src/state/input-controls.ts`: text, number, currency, percentage, slider with optional stops, single choice, multiple choice, yes/no). `answer_human_input { requestId, value }` checks the value against that control (`checkAnswer`) and stores both the value and how it reads ("USD 500,000"); `skip_human_input { requestId }` marks it skipped. Both are refused from the model and the orchestrator: only the user answers or skips. In the demo, the budget answer picks one of three scripted endings (`ENDINGS` and `timelineFor` in the fixture); in live mode the answer is also added as the user's own evidence and sent to `POST /api/answer`, and Vex's review and the final answer wait until every question is answered or skipped.
 
 **Live questions (planner).** The objective planner's reply is not an operation list: it is a `Plan` (`src/state/plan.ts`: interpretation, 2–6 stations, at most one task per agent, up to 2 assumptions and 2 questions), validated on the server and again in the browser. `planToOperations` turns it into ordinary `add_module`, `add_assumption`, `request_human_input` and `assign_agent` operations with ids MORPH assigns, proposed through the gate as `{ kind: "model", label: "Planner", agentId: "nova" }`. Each station's `why` is the planner's one-line reason. The user's question is recorded as `set_objective` from the user.
 

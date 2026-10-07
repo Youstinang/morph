@@ -59,8 +59,12 @@ export function operationEvents(o: MorphOperation, after: Workspace): EventDraft
       return [{ type: "recommendation_updated", recommendation: o.recommendation }];
     case "request_human_input":
       return [{ type: "human_input_requested", requestId: o.requestId, question: o.question, askedBy: o.askedBy }];
-    case "answer_human_input":
-      return [{ type: "human_input_received", requestId: o.requestId, answer: o.answer, answeredBy: o.source.kind === "user" ? "user" : "autoplay" }];
+    case "answer_human_input": {
+      const answer = after.humanInputs.find((item) => item.id === o.requestId)!.answer!;
+      return [{ type: "human_input_received", requestId: o.requestId, answer, answeredBy: o.source.kind === "user" ? "user" : "autoplay" }];
+    }
+    case "skip_human_input":
+      return [{ type: "human_input_skipped", requestId: o.requestId, skippedBy: o.source.kind === "user" ? "user" : "autoplay" }];
     case "assign_agent":
       return [{ type: "task_assigned", agentId: o.agentId, task: o.task, moduleId: o.moduleId }];
     case "focus_camera":

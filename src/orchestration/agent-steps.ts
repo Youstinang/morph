@@ -13,6 +13,7 @@ import {
   type CritiqueResult,
   type RecheckResult,
   type ResearchResult,
+  type QuestionReply,
   type SynthesisResult,
 } from "@/state/live-work";
 import type { Plan } from "@/state/plan";
@@ -32,6 +33,8 @@ export interface StepContext {
   combined: CombineResult | null;
   critique: CritiqueResult | null;
   recheck: RecheckResult | null;
+  /** The user's replies to Nova's questions, by question. */
+  replies: ReadonlyMap<number, QuestionReply>;
 }
 
 export type StepOutcome =
@@ -59,6 +62,17 @@ function findingsText(context: StepContext): string {
     .sort(([a], [b]) => a - b)
     .map(([task, finding]) => `${findingKey(task)} (${nameOf(context.plan.tasks[task]?.agent ?? "")}): ${finding.finding}`);
   return lines.length ? lines.join("\n") : "(none)";
+}
+/** The user's answers are their own facts about their situation, quoted as data like the question. */
+function repliesText(context: StepContext): string {
+  if (context.plan.questions.length === 0) return "(no questions asked)";
+  return context.plan.questions
+    .map((item, i) => {
+      const reply = context.replies.get(i);
+      const answer = !reply ? "(not answered)" : reply.kind === "skip" ? "(they chose not to answer)" : `"""${reply.display.replaceAll('"""', '"')}"""`;
+      return `- ${item.question} → ${answer}`;
+    })
+    .join("\n");
 }
 const combinedText = (context: StepContext) => (context.combined ? context.combined.insight : "(none)");
 const assumptionsText = (plan: Plan) =>
@@ -126,12 +140,12 @@ export function critiqueRequest(context: StepContext) {
   const targets = critiqueTargets(context);
   return {
     schemaName: "morph_critique",
-    system: `You are Vex, the critic on MORPH's team. Review the plan's assumptions and the team's findings, and challenge the weakest one.
+    system: `You are Vex, the critic on MORPH's team. Review the plan's assumptions and the team's findings, and challenge the weakest one. The person's own answers are given facts about their situation: challenge findings that clash with them, not the answers.
 - target: the key of the item you challenge, or "none" if nothing is weak.
 - headline: at most 5 words.
 - note: one plain sentence under 20 words: why it may be wrong, or what must be checked.
 ${GROUND_RULES}`,
-    prompt: `${quote("Question", context.objective)}\n\nAssumptions:\n${assumptionsText(context.plan)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}`,
+    prompt: `${quote("Question", context.objective)}\n\nThe person's own answers:\n${repliesText(context)}\n\nAssumptions:\n${assumptionsText(context.plan)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}`,
     jsonSchema: strictObject({ target: { type: "string", enum: targets }, headline: str(40), note: str(160) }),
   };
 }
@@ -145,10 +159,11 @@ export function synthesisRequest(context: StepContext) {
     system: `You are Lume and Nova, agreeing on MORPH's tentative answer from the team's findings.
 - statement: the answer, at most 8 plain words.
 - reason: at most 2 short sentences, under 50 words, that rest on the findings and mention Vex's doubt if there is one.
+- Fit the answer to the person's own answers. If they chose not to answer a question, say briefly that the answer doesn't account for it.
 - confidence: low, or moderate if the findings agree. The findings are general knowledge, not research.
 - basis: the keys of the findings the answer rests on.
 ${GROUND_RULES}`,
-    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubt}\nRe-check: ${recheck}`,
+    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nThe person's own answers:\n${repliesText(context)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubt}\nRe-check: ${recheck}`,
     jsonSchema: strictObject({
       statement: str(90),
       reason: str(320),
