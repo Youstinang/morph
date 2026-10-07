@@ -10,10 +10,12 @@ export function useSound(bus: EventBus) {
   const synth = useRef<Synth | null>(null);
   const [on, setOn] = useState(false);
 
+  /** Turning sound on answers with a short tone, so a quiet deck doesn't look broken. */
   const toggle = useCallback(() => {
     synth.current ??= createSynth();
-    setOn((value) => !value);
-  }, []);
+    if (!on) synth.current?.play("transfer");
+    setOn(!on);
+  }, [on]);
 
   useEffect(() => {
     if (!on) {
