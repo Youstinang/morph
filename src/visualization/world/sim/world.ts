@@ -3,11 +3,14 @@ import type { AgentTarget, EventDraft, WorkspaceEvent } from "@/events/schema";
 import { createModule, moduleSpot, removeModule, applyModuleChange, stepModules } from "./modules";
 import { AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./roster";
 import { presentationFor } from "./presentation";
-import type { AgentId, AgentRuntime, AgentState, CoreState, ModuleHeadline, ModuleId, ScenarioWeights, StoryView, Vec2, World } from "./types";
+import type { AgentId, AgentRuntime, AgentState, Collaboration, CoreState, ModuleHeadline, ModuleId, ScenarioWeights, StoryView, Vec2, World } from "./types";
 
 export const WALK_SPEED = 3.4;
 export const ASSIGN_PAUSE = 0.55;
-export const HANDOFF_SECONDS = 1.4;
+export const HANDOFF_SECONDS = 1.6;
+/** How long a catch pulse and a cleared failed card stay visible. */
+export const CATCH_SECONDS = 1.2;
+export const CARD_FADE_SECONDS = 1.5;
 
 /** Publishes a physical report (arrival, landed handoff) back onto the bus. */
 export type WorldReport = (draft: EventDraft) => void;
@@ -45,7 +48,7 @@ export function createWorld(cycle = 0): World {
       facingAgent: null,
     };
   }
-  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], story: emptyStory(), morph: null };
+  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], catches: [], failedCards: [], story: emptyStory(), morph: null };
 }
 
 const isAgent = (world: World, id: string): id is AgentId => id in world.agents;
@@ -97,6 +100,10 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
   }
 
   const story = world.story;
+  if (event.type === "task_failed" && isAgent(world, event.agentId)) leaveFailedCard(world, world.agents[event.agentId]);
+  if (event.type === "task_completed" && isAgent(world, event.agentId)) {
+    for (const card of world.failedCards) if (card.agentId === event.agentId && card.clearedAt === null) card.clearedAt = world.time;
+  }
   switch (event.type) {
     case "agent_assigned": {
       if (!isAgent(world, event.agentId)) return;
@@ -210,6 +217,66 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
   }
 }
 
+/**
+ * Leaves the agent's failed work beside it at the station, once per failure streak. It sits to the side
+ * nearer the front of the deck, so the agent and the station don't hide it in the overview.
+ */
+function leaveFailedCard(world: World, agent: AgentRuntime) {
+  if (world.failedCards.some((card) => card.agentId === agent.id && card.clearedAt === null)) return;
+  const mod = agent.zone ? world.modules[agent.zone] : undefined;
+  const toward = mod ? mod.position : ([0, 0] as const);
+  const dx = toward[0] - agent.position[0];
+  const dz = toward[1] - agent.position[1];
+  const length = Math.hypot(dx, dz) || 1;
+  let [sx, sz] = [-dz / length, dx / length];
+  if (sz < 0) [sx, sz] = [-sx, -sz];
+  world.failedCards.push({
+    agentId: agent.id,
+    zone: agent.zone,
+    position: [agent.position[0] + sx * 0.9, agent.position[1] + sz * 0.9],
+    failedAt: world.time,
+    clearedAt: null,
+  });
+}
+
+const TOGETHER = new Set<AgentState>(["collaborating", "working", "evaluating"]);
+
+/** Where streams meet the Intent Core's shell, measured from its axis. */
+const CORE_SURFACE = 1.3;
+
+/**
+ * Agents working together: at least one collaborating, with everyone active at the same place. At a station
+ * they share a hologram between them; at the Core the Core itself is the shared structure, so the hub is the
+ * point on its shell facing them.
+ */
+export function collaborations(world: World): Collaboration[] {
+  const places = new Map<string, AgentId[]>();
+  for (const id of AGENT_ORDER) {
+    const agent = world.agents[id];
+    if (!TOGETHER.has(agent.state) || agent.moving) continue;
+    if (agent.zone === null && Math.hypot(agent.position[0], agent.position[1]) > CORE_RADIUS + 2.5) continue;
+    const key = agent.zone ?? "core";
+    places.set(key, [...(places.get(key) ?? []), id]);
+  }
+  const groups: Collaboration[] = [];
+  for (const [place, ids] of places) {
+    if (ids.length < 2 || !ids.some((id) => world.agents[id].state === "collaborating")) continue;
+    let x = 0;
+    let z = 0;
+    for (const id of ids) {
+      x += world.agents[id].position[0] / ids.length;
+      z += world.agents[id].position[1] / ids.length;
+    }
+    if (place === "core") {
+      const radius = Math.hypot(x, z) || 1;
+      x = (x / radius) * CORE_SURFACE;
+      z = (z / radius) * CORE_SURFACE;
+    }
+    groups.push({ agents: ids, hub: [x, z], atCore: place === "core" });
+  }
+  return groups;
+}
+
 function faceToward(agent: AgentRuntime, point: Vec2) {
   const dx = point[0] - agent.position[0];
   const dz = point[1] - agent.position[1];
@@ -307,8 +374,13 @@ export function stepWorld(world: World, dt: number, report: WorldReport): void {
   if (landed.length > 0) {
     world.artifacts = world.artifacts.filter((artifact) => !landed.includes(artifact));
     for (const artifact of landed) {
+      world.catches.push({ agentId: artifact.to, kind: artifact.kind, from: artifact.from, at: world.time });
       report({ type: "artifact_handoff_completed", artifactId: artifact.id, kind: artifact.kind, from: artifact.from, to: artifact.to });
     }
+  }
+  if (world.catches.some((c) => world.time - c.at > CATCH_SECONDS)) world.catches = world.catches.filter((c) => world.time - c.at <= CATCH_SECONDS);
+  if (world.failedCards.some((card) => card.clearedAt !== null && world.time - card.clearedAt > CARD_FADE_SECONDS)) {
+    world.failedCards = world.failedCards.filter((card) => card.clearedAt === null || world.time - card.clearedAt <= CARD_FADE_SECONDS);
   }
   stepModules(world);
 }

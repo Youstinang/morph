@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 14 — Agent orchestration (authorized 2026-10-07: "go for it"); complete, no visual checkpoint
+Phase 15 — Collaboration, handoff, failure and retry visuals (authorized 2026-10-07: "remove any limitation and go for phase 15"); awaiting visual approval
 
 ## Status
-Complete — Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Phase 15 is implemented and validated, and waits for the user's visual approval (approve, revise or compare). Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -29,6 +29,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 19 (moved forward) — Objective planner / real AI provider: "Ask a question" on `/lab` plans the user's own question with a real model and acts the plan out on the deck.
 - Phase 13 — Deterministic demo runtime: the run controller, demo runtime and live question run live in `src/orchestration` on a fixed-step clock; the 3D world attaches to the run.
 - Phase 14 — Agent orchestration: after planning, live questions continue. Agents work their tasks two at a time with model calls, Vex challenges the weakest point, and Lume and Nova give a labelled tentative answer, all within per-question limits enforced by the server.
+- Phase 15 — Collaboration, handoff, failure and retry visuals (implemented and validated; awaiting visual approval).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -151,6 +152,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - The browser's scheduler (`src/orchestration/scheduler.ts`) handles dependencies, two at a time, timeouts on the run clock, one retry after 1.5 s, and the attempt cap. A task starts only when its agent has arrived. The review waits for any finding and the answer waits for the review, so if every task fails the team stops without them. The whole question also stops after 150 s.
   - On screen, every state is a real step: working while its call runs; "stuck … trying again shortly" then retrying; Vex walks to the Core to review; Lume walks there and collaborates with Nova; the answer, then everyone walks home. A stop at a limit shows "The team stopped: {reason}" with the Core on hold, and the team goes home.
   - No new dependency.
+- 2026-10-07, Phase 15: the user asked to "remove any limitation", then chose to **raise the limits a lot but keep a hard stop**: 4 agents at once, 60 s per task, 2 retries, 30 AI calls and a USD 0.05 hard stop per question (`LIVE_LIMITS`). The provider timeout follows the task limit (58 s). The whole question stops after 240 s.
+  - Look, chosen by the user (**physical**): a handoff is a glowing data card riding a light beam from hand to hand, with a pulse ring at the receiver's feet when it lands; agents working together share a small rotating hologram that each one's data stream flows into (at the Core, their streams flow into the Core itself instead, because a separate hologram was lost in its glow); a failure shows a calm red warning sign over the agent and leaves a cracked grey card beside them, which turns amber while they try again and fades once the task succeeds.
+  - Live work, chosen by the user (**real**): two new AI steps. After research, every researcher walks their finding to Sage at the Core (one card each), and Sage combines them into one insight (one call). Sage hands that card to Vex, who reviews. If Vex doubts a specific finding, he hands a red flag card to that finding's researcher, who walks back to their station "going back to double-check" and re-checks it (one call): it is kept, or a revised finding replaces the old one (the old one stays in the record, marked superseded). Lume and Nova's answer waits for the re-check and names whether the doubted finding stood.
+  - The server enforces the new steps: each one runs at most once; a re-check needs a critique that named a real finding; the browser never names the task to re-check, the server takes it from Vex's critique.
+  - Demo timing: Sage now waits for Vex to arrive at Costs, so the demo's "Teaming up" hologram always has two agents in it.
+  - No new dependency.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -266,6 +273,17 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Found and fixed in the live check: the late "done; waiting for the team" status stopped Vex's walk to the Core when his research finished last, so the review never started; the regression test above covers it. Also found by tests: a failed agent showed "waiting" in the same frame, so the failure was never visible.
   - Real model in Chrome at 1440×900 and 390×844: the bakery question ran to a tentative answer in about 30 s with 8 calls (plan, five research, review, answer) for about USD 0.0023; 60 FPS, no console errors. The production build contains neither key.
   - Previews: `live-work-review.png`, `live-work-answer.png`, `live-work-home.png`, `live-work-phone.png`.
+- Phase 15 collaboration visuals pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 153 in 21 files (new and updated tests for the combine and re-check steps, the raised limits, and the new world visuals).
+  - Route tests: combine, re-check and answer each run once; a re-check is refused when Vex doubted an assumption rather than a finding; a re-check that names a task is refused as malformed; retries stop at the new limit.
+  - Live-run tests (fake server): findings travel to Sage as cards, Sage's card travels to Vex, and the answer comes after; when Vex doubts a finding, a flag card goes to that researcher, who walks back in the "retrying" travel state, and the revised finding replaces the old one, which is marked superseded; up to four agents work at once; with every task failing, each is tried three times.
+  - World tests: every landed card makes a catch pulse; a failed task leaves a cracked card that is visible during the retry and clears on success; the demo's collaborating groups are exactly Sage with Vex and Lume with Nova; restarting clears everything.
+  - Real model in Chrome at 1440×900: the bakery question ran to a tentative answer in about 28 s with 8 calls (plan, four research, combine, review, answer) for about USD 0.002; 59.5 FPS; no console errors. Vex doubted an assumption, so no re-check happened in that run (the re-check is covered by tests and seen in the demo's flag beat).
+  - Demo checked in Chrome: Orion's handoff, the warning sign and cracked card on failure, the amber card while retrying, the Sage and Vex hologram at Costs, Vex's red flag card flying to Orion, and Nova and Lume's streams into the Core; 58–60 FPS. Phone width (390×844) works, though the new effects are small there, as is the rest of the world.
+  - Found and fixed: the effects were too small to read (about doubled); the cracked card hid behind the agent (moved beside them); Sage showed "Teaming up" alone before Vex arrived (demo timing); the hologram at the Core was lost in its glow (streams now flow into the Core).
+  - Reduced motion: the hologram stops spinning and bobbing, its data dots stand still, and the warning sign stops pulsing (in code; not checked in the browser).
+  - Key safety: the production build contains neither key; `.env.local` stays git-ignored.
+  - Previews: `p15-handoff-live.png`, `p15-brief-live.png`, `p15-failure.png`, `p15-retry.png`, `p15-collab-costs.png`, `p15-flag.png`, `p15-core.png`, `p15-phone.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -281,13 +299,16 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - A carried station is small (half size) and seen from above in the default view, so the lift reads less strongly than in close views.
 - Overlap-free motion is tested for random reshuffles; a pile-up of many interruptions within a fraction of a second has no guarantee beyond those tests.
 - The OpenAI and Anthropic keys pasted in chat must be revoked and replaced in `.env.local`.
+- Handoffs between agents standing close together (for example at the Core) are short, so the card's flight is brief.
+- In a live run, a re-check happens only when Vex doubts a specific finding; often he doubts an assumption instead.
+- The architecture audit after Phases 13–15 is due before the next phase's work.
 - Live findings are the model's general knowledge, not research: there are no search or source tools yet (Phase 20). They are labelled and never verified. Nova's questions can't be answered yet (Phase 16), so the answer can't use them.
 - Each question's record lives in one server process's memory: a restart, or a second server instance, forgets it, and the next step gets "this question has expired; ask it again" (shared storage would come with hosting, Phase 26).
 - An agent with two tasks in one plan isn't possible (the planner tidies it away), so the scheduler doesn't handle one agent at two stations.
 - Once answered, live mode stays on screen; "Back to demo" or a new question leaves it.
 - Rate limits and the hourly cap are per server process and reset on restart; a multi-instance deployment needs a shared limit (Phase 26).
 - Station panels in live mode show "Looking into it…" until that station's finding arrives.
-- `/api/agent-step` has the same open `X-Forwarded-For` and content-type weaknesses as `/api/plan` (Phase 24); each question's own limits still cap a single question at USD 0.01.
+- `/api/agent-step` has the same open `X-Forwarded-For` and content-type weaknesses as `/api/plan` (Phase 24); each question's own limits still cap a single question at USD 0.05.
 - Plan quality depends on the model; it is a proposal for what to investigate, never evidence.
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
@@ -325,12 +346,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Dependencies: none added since Phase 9; production audit clean. Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
 
 ## Deferred Decisions
-- Phase 14 limits: decided 2026-10-07 (2 at once, 30 s, 1 retry, 10 calls, USD 0.01). Phase 18: camera style. Phase 20: search provider.
+- Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05). Phase 18: camera style. Phase 20: search provider.
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 15 — Collaboration, handoff, failure and retry visuals, once the user authorizes it. It has a visual approval checkpoint.
+None until the user visually approves Phase 15 (approve, revise or compare). After approval: Phase 16 — Human-in-loop controls, once the user authorizes it, preceded by the audit due after Phases 13–15.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

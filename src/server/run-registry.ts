@@ -1,5 +1,5 @@
 import type { StepContext } from "@/orchestration/agent-steps";
-import { LIVE_LIMITS, type AgentStep, type CritiqueResult, type ResearchResult } from "@/state/live-work";
+import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
 import type { Plan, PlanUsage } from "@/state/plan";
 
 /**
@@ -16,7 +16,10 @@ export interface RunRecord extends StepContext {
   usd: number;
   attempts: Map<string, number>;
   findings: Map<number, ResearchResult>;
+  combined: CombineResult | null;
   critique: CritiqueResult | null;
+  recheck: RecheckResult | null;
+  answer: SynthesisResult | null;
 }
 
 export interface RunRegistry {
@@ -66,7 +69,10 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
         usd: usage.estimatedUsd,
         attempts: new Map(),
         findings: new Map(),
+        combined: null,
         critique: null,
+        recheck: null,
+        answer: null,
       });
       return id;
     },
@@ -79,12 +85,18 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
       if (run.calls + pending >= LIVE_LIMITS.modelCalls) return { reason: "this question reached its limit of AI calls", stop: true };
       if (run.usd >= LIVE_LIMITS.usd) return { reason: "this question reached its spending limit", stop: true };
       const key = stepKey(step);
-      if ((run.attempts.get(key) ?? 0) > LIVE_LIMITS.retries) return { reason: "this task already used its retry", stop: false };
+      if ((run.attempts.get(key) ?? 0) > LIVE_LIMITS.retries) return { reason: "this task already used its retries", stop: false };
       if (step.kind === "research") {
         if (!run.plan.tasks[step.task]) return { reason: "that task isn't in the plan", stop: false };
         if (run.findings.has(step.task)) return { reason: "that task is already done", stop: false };
-      } else if (run.findings.size === 0) {
-        return { reason: "there are no findings to work from yet", stop: false };
+        return null;
+      }
+      if (run.findings.size === 0) return { reason: "there are no findings to work from yet", stop: false };
+      const done = { combine: run.combined, critique: run.critique, recheck: run.recheck, synthesis: run.answer }[step.kind];
+      if (done) return { reason: "that step is already done", stop: false };
+      if (step.kind === "recheck") {
+        const task = doubtedTask(run.critique);
+        if (task === null || !run.findings.has(task)) return { reason: "Vex hasn't doubted a finding", stop: false };
       }
       return null;
     },

@@ -136,6 +136,14 @@ Text stays text: the HUD renders it as plain strings, never as HTML.
 - every reply's cost: `model_call_completed` with purpose `research`, `critique` or `synthesis`.
 - the end: everyone `agent_assigned` home and `agent_idle`; if the team couldn't answer, first `run_waiting` "The team stopped: {reason}.".
 
+**Live questions (collaboration and re-check, Phase 15).** Two more steps: `{ kind: "combine" }` (Sage, once any research has succeeded and she is at the Core with the findings handed over) and `{ kind: "recheck" }` (the researcher of the finding Vex doubted, at their station; the server takes the task from the critique). The critique now waits for the combine step, and the synthesis waits for any re-check. Handoffs are real events: `artifact_handoff_started` (kinds `evidence` for a finding to Sage, `insight` for Sage's card to Vex, `flag` for Vex's doubt to the researcher) and, when the world reports the landing, `artifact_handoff_completed`, after which the giver heads home or the receiver sets off. Events per new step:
+
+- combine succeeded: `add_evidence` id `combined` (a model fact labelled "Analyst", no station), then `task_completed`.
+- critique doubting a finding: `retry_requested` for that researcher, the flag handoff, then `agent_assigned` with travel `retrying` ("going back to double-check").
+- re-check succeeded: if revised, `add_evidence` of the revised finding, `remove_evidence` of the old one with `supersededBy` and `update_module`; either way, `remove_evidence` of Vex's doubt superseded by the current finding, then `task_completed`.
+- a failed task leaves its card cracked in the world until that agent's `task_completed`.
+- every reply's cost: `model_call_completed` with purpose `combine` or `recheck` as well.
+
 The operation gate (`src/state/gate.ts`) is the only caller in a run. `gate.submit(input, { as, summary })` stamps the trusted channel's provenance (`as`) over whatever source the proposal claims, applies the operation to the store, and publishes either its record events carrying the operation reference, or `operation_rejected` with the reason. The world reacts only to those published record events, so it never shows a refused change. The development-only page `/dev/operations` sends good and deliberately broken requests through a real gate.
 
 ## Demo timeline

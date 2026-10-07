@@ -11,6 +11,7 @@ import {
   type Group,
   type Mesh,
 } from "three";
+import { useReducedMotion } from "../motion";
 import { AGENTS, AGENT_ORDER } from "../sim/roster";
 import type { AgentId, AgentState, World } from "../sim/types";
 import { AgentModel, preloadAgentModels, type BodyMotion } from "./agent-model";
@@ -52,6 +53,9 @@ export function Character({ id, worldRef, selected, onSelect }: CharacterProps) 
   const body = useRef<Group>(null);
   const ring = useRef<Mesh>(null);
   const marker = useRef<Mesh>(null);
+  const sign = useRef<Group>(null);
+  const calm = useReducedMotion();
+  const signMaterial = useMemo(() => new MeshBasicMaterial({ color: "#ff6b5f", transparent: true, opacity: 0, toneMapped: false, depthWrite: false }), []);
 
   const ringMaterial = useMemo(
     () =>
@@ -83,10 +87,11 @@ export function Character({ id, worldRef, selected, onSelect }: CharacterProps) 
   useEffect(
     () => () => {
       ringMaterial.dispose();
+      signMaterial.dispose();
       route.geometry.dispose();
       (route.material as LineDashedMaterial).dispose();
     },
-    [ringMaterial, route],
+    [ringMaterial, signMaterial, route],
   );
 
   const anim = useRef<BodyMotion & { facing: number }>({
@@ -99,6 +104,8 @@ export function Character({ id, worldRef, selected, onSelect }: CharacterProps) 
   });
   const baseColor = useMemo(() => new Color(look.accent), [look.accent]);
   const tint = useMemo(() => new Color(), []);
+  const routeTint = useMemo(() => new Color(), []);
+  const signShown = useRef(0);
 
   useFrame((frame, delta) => {
     const world = worldRef.current;
@@ -139,6 +146,20 @@ export function Character({ id, worldRef, selected, onSelect }: CharacterProps) 
       ringMaterial.opacity = selected ? 1 : active ? 0.9 : 0.55;
     }
 
+    if (sign.current) {
+      const stuck = agent.state === "failed" || agent.state === "blocked";
+      signShown.current = MathUtils.damp(signShown.current, stuck ? 1 : 0, 6, dt);
+      const shown = signShown.current;
+      sign.current.visible = shown > 0.01;
+      sign.current.position.set(agent.position[0], 1.95 * look.height * CHARACTER_SCALE, agent.position[1]);
+      sign.current.quaternion.copy(frame.camera.quaternion);
+      sign.current.scale.setScalar(0.7 + shown * 0.3);
+      signMaterial.opacity = shown * (calm ? 0.9 : 0.72 + Math.sin(t * 3.2) * 0.18);
+    }
+
+    const routeColor = STATE_COLORS[agent.state];
+    (route.material as LineDashedMaterial).color.copy(routeColor ? routeTint.set(routeColor) : baseColor);
+
     const positions = route.geometry.getAttribute("position") as BufferAttribute;
     const showRoute = agent.route.length > 0 && (agent.state === "assigned" || agent.moving);
     route.visible = showRoute;
@@ -166,6 +187,11 @@ export function Character({ id, worldRef, selected, onSelect }: CharacterProps) 
     <>
       <primitive object={route} />
       <mesh ref={marker} geometry={geo.ring(0.32, 0.4)} material={ringMaterial} rotation={[-Math.PI / 2, 0, 0]} visible={false} />
+      <group ref={sign} visible={false}>
+        <mesh geometry={geo.ring(0.2, 0.26, 3)} material={signMaterial} rotation={[0, 0, Math.PI / 2]} />
+        <mesh geometry={geo.plane(0.045, 0.11)} material={signMaterial} position={[0, 0.02, 0]} />
+        <mesh geometry={geo.plane(0.045, 0.04)} material={signMaterial} position={[0, -0.07, 0]} />
+      </group>
       <group ref={root} onClick={handleClick} scale={CHARACTER_SCALE}>
         <mesh ref={ring} geometry={geo.ring(0.42, 0.47)} material={ringMaterial} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>

@@ -1,5 +1,5 @@
 import { runAgentStep } from "@/orchestration/agent-steps";
-import { StepRequestSchema, type StepResponse } from "@/state/live-work";
+import { StepRequestSchema, doubtedTask, type StepResponse } from "@/state/live-work";
 import { clientId, json, readJson } from "./http";
 import type { AiProvider } from "./providers/types";
 import type { RateLimiter } from "./rate-limit";
@@ -52,7 +52,17 @@ export function createStepHandler(deps: StepHandlerDeps) {
       return reply({ ok: false, reason: outcome.reason, usage }, 502);
     }
     if (outcome.kind === "research" && step.kind === "research") run.findings.set(step.task, outcome.result);
+    if (outcome.kind === "combine") run.combined = outcome.result;
     if (outcome.kind === "critique") run.critique = outcome.result;
+    if (outcome.kind === "synthesis") run.answer = outcome.result;
+    if (outcome.kind === "recheck") {
+      run.recheck = outcome.result;
+      const task = doubtedTask(run.critique);
+      if (task !== null && outcome.result.verdict === "revised") {
+        const { finding, headline, detail, kind } = outcome.result;
+        run.findings.set(task, { finding, headline, detail, kind });
+      }
+    }
     return reply({ ...outcome, usage }, 200);
   };
 }

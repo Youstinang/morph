@@ -143,6 +143,13 @@ Zones are distinct spatial machines that materialize, grow, shrink, gain or lose
 
 Agent movement must be readable: subtle paths, light traces, floor/grid activation, waypoints, and dynamic routes. Data artifacts (evidence shard, source packet, analysis cube, risk marker, assumption token, scenario fragment) have physical presence and can be carried, transmitted, combined, rejected, or stored.
 
+Phase 15 (user choice "physical", 2026-10-07):
+- **Handoff.** A glowing data card (glass face, frame and three bars, coloured by kind; red for Vex's flag) rides a light beam along an arc from the giver's hand to the receiver's, with a short ghost trail. When it lands, a pulse ring opens at the receiver's feet.
+- **Working together.** Two or more agents standing at the same place, at least one of them collaborating, share a small rotating hologram (ring, wire structure, arc, and a floor ring); a stream of data dots flows from each one's chest into it. At the Core, the Core itself is the shared structure: the streams flow into its shell and no separate hologram is drawn.
+- **Failure and retry.** A calm red warning sign floats over a failed or blocked agent, with a slow pulse. The failed work stays beside them as a cracked grey card, which turns amber while they try again and fades once the task succeeds. The route line takes the state's colour (amber when retrying).
+- **Demo timing.** Sage waits for Vex at Costs, so their hologram always has both of them.
+- **Reduced motion.** The hologram stops spinning and bobbing, the dots hold still, and the warning sign stays steady.
+
 ## Possibility Engine
 
 A dramatic spatial branching structure growing from the current state into scenarios (flagship: Direct Entry, Local Partnership, Delay Entry). Branches strengthen, weaken, recede, or become dominant as evidence and assumptions change. Values are labeled as model-generated assessments.

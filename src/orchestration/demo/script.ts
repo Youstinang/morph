@@ -78,6 +78,7 @@ export const DEMO_SCRIPT: Record<TeamAgentId, readonly DemoAction[]> = {
     { kind: "moveTo", target: { zone: "economics" }, task: "heading to Costs" },
     { kind: "hold", seconds: 3, state: "working", task: "estimating the cost of the first 18 months", zone: "economics", evidence: 3 },
     { kind: "emit", signal: "analysis" },
+    { kind: "waitFor", signal: "vex-at-costs", task: "waiting for Vex to review the estimate" },
     { kind: "hold", seconds: 2.8, state: "collaborating", task: "going through the numbers with Vex", zone: "economics" },
     { kind: "waitFor", signal: "retry-done", task: "waiting for Orion to double-check" },
     { kind: "moveTo", target: home, task: "heading back", state: "returning" },
@@ -99,6 +100,7 @@ export const DEMO_SCRIPT: Record<TeamAgentId, readonly DemoAction[]> = {
   vex: [
     { kind: "waitFor", signal: "analysis", task: "waiting for something to review" },
     { kind: "moveTo", target: { zone: "economics" }, task: "going to review Sage's estimate" },
+    { kind: "emit", signal: "vex-at-costs" },
     { kind: "hold", seconds: 2.8, state: "evaluating", task: "questioning the 6-month deal time", zone: "economics" },
     { kind: "emit", signal: "challenge" },
     { kind: "handoff", to: "orion", artifact: "flag", signal: "retry", task: "asking Orion to double-check" },

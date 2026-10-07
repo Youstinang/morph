@@ -1,12 +1,17 @@
 import type { AiProvider, ModelUsage } from "@/server/providers/types";
 import {
+  CombineResultSchema,
   CritiqueResultSchema,
+  RecheckResultSchema,
   ResearchResultSchema,
   SynthesisResultSchema,
   assumptionKey,
+  doubtedTask,
   findingKey,
   type AgentStep,
+  type CombineResult,
   type CritiqueResult,
+  type RecheckResult,
   type ResearchResult,
   type SynthesisResult,
 } from "@/state/live-work";
@@ -24,12 +29,16 @@ export interface StepContext {
   objective: string;
   plan: Plan;
   findings: ReadonlyMap<number, ResearchResult>;
+  combined: CombineResult | null;
   critique: CritiqueResult | null;
+  recheck: RecheckResult | null;
 }
 
 export type StepOutcome =
   | { ok: true; kind: "research"; result: ResearchResult; usage: ModelUsage }
+  | { ok: true; kind: "combine"; result: CombineResult; usage: ModelUsage }
   | { ok: true; kind: "critique"; result: CritiqueResult; usage: ModelUsage }
+  | { ok: true; kind: "recheck"; result: RecheckResult; usage: ModelUsage }
   | { ok: true; kind: "synthesis"; result: SynthesisResult; usage: ModelUsage }
   | { ok: false; reason: string; usage: ModelUsage | null };
 
@@ -51,6 +60,7 @@ function findingsText(context: StepContext): string {
     .map(([task, finding]) => `${findingKey(task)} (${nameOf(context.plan.tasks[task]?.agent ?? "")}): ${finding.finding}`);
   return lines.length ? lines.join("\n") : "(none)";
 }
+const combinedText = (context: StepContext) => (context.combined ? context.combined.insight : "(none)");
 const assumptionsText = (plan: Plan) =>
   plan.assumptions.length ? plan.assumptions.map((item, i) => `${assumptionKey(i)}: ${item.statement}`).join("\n") : "(none)";
 
@@ -69,7 +79,39 @@ Give the single most useful finding for your task.
 - kind: fact (how things usually are), risk (what could go wrong) or constraint (a rule or limit).
 ${GROUND_RULES}`,
     prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\nYour task: ${item.task}`,
-    jsonSchema: strictObject({ finding: str(160), headline: str(40), detail: str(80), kind: { type: "string", enum: ["fact", "risk", "constraint"] } }),
+    jsonSchema: researchSchema(),
+  };
+}
+
+const researchSchema = (extra: Record<string, unknown> = {}) =>
+  strictObject({ ...extra, finding: str(160), headline: str(40), detail: str(80), kind: { type: "string", enum: ["fact", "risk", "constraint"] } });
+
+export function combineRequest(context: StepContext) {
+  return {
+    schemaName: "morph_combine",
+    system: `You are Sage, the analyst on MORPH's team. The others have handed you their findings. Put them together into the one takeaway that matters most for the decision.
+- insight: one plain sentence under 25 words that connects the findings; add nothing they don't support.
+- headline: at most 5 words.
+${GROUND_RULES}`,
+    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nFindings:\n${findingsText(context)}`,
+    jsonSchema: strictObject({ insight: str(160), headline: str(40) }),
+  };
+}
+
+export function recheckRequest(context: StepContext) {
+  const task = doubtedTask(context.critique);
+  const item = task === null ? undefined : context.plan.tasks[task];
+  const finding = task === null ? undefined : context.findings.get(task);
+  if (!item || !finding || !context.critique) return null;
+  const agent = TEAM_AGENTS.find((member) => member.id === item.agent)!;
+  return {
+    schemaName: "morph_recheck",
+    system: `You are ${agent.name}, the ${agent.role} on MORPH's team. Vex, the critic, doubts your finding. Look at it again honestly.
+- verdict: kept if the finding stands as it is, revised if it should change.
+- finding, headline, detail, kind: the finding as it should now read (repeat it if kept). Same lengths as before: a sentence under 25 words, at most 5 words, at most 10 words.
+${GROUND_RULES}`,
+    prompt: `${quote("Question", context.objective)}\n\nYour task: ${item.task}\nYour finding: ${finding.finding}\nVex's doubt: ${context.critique.note}`,
+    jsonSchema: researchSchema({ verdict: { type: "string", enum: ["kept", "revised"] } }),
   };
 }
 
@@ -89,7 +131,7 @@ export function critiqueRequest(context: StepContext) {
 - headline: at most 5 words.
 - note: one plain sentence under 20 words: why it may be wrong, or what must be checked.
 ${GROUND_RULES}`,
-    prompt: `${quote("Question", context.objective)}\n\nAssumptions:\n${assumptionsText(context.plan)}\n\nFindings:\n${findingsText(context)}`,
+    prompt: `${quote("Question", context.objective)}\n\nAssumptions:\n${assumptionsText(context.plan)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}`,
     jsonSchema: strictObject({ target: { type: "string", enum: targets }, headline: str(40), note: str(160) }),
   };
 }
@@ -97,6 +139,7 @@ ${GROUND_RULES}`,
 export function synthesisRequest(context: StepContext) {
   const keys = [...context.findings.keys()].map(findingKey);
   const doubt = context.critique && context.critique.target !== "none" ? context.critique.note : "(none)";
+  const recheck = context.recheck ? `the finding was re-checked and ${context.recheck.verdict === "kept" ? "stands" : "was revised (the findings above show the revision)"}` : "(none)";
   return {
     schemaName: "morph_synthesis",
     system: `You are Lume and Nova, agreeing on MORPH's tentative answer from the team's findings.
@@ -105,7 +148,7 @@ export function synthesisRequest(context: StepContext) {
 - confidence: low, or moderate if the findings agree. The findings are general knowledge, not research.
 - basis: the keys of the findings the answer rests on.
 ${GROUND_RULES}`,
-    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nFindings:\n${findingsText(context)}\n\nVex's doubt: ${doubt}`,
+    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubt}\nRe-check: ${recheck}`,
     jsonSchema: strictObject({
       statement: str(90),
       reason: str(320),
@@ -117,7 +160,16 @@ ${GROUND_RULES}`,
 
 /** Runs one step against the question's context. The caller has already checked the step is allowed now. */
 export async function runAgentStep(provider: AiProvider, context: StepContext, step: AgentStep, signal?: AbortSignal): Promise<StepOutcome> {
-  const request = step.kind === "research" ? researchRequest(context, step.task) : step.kind === "critique" ? critiqueRequest(context) : synthesisRequest(context);
+  const request =
+    step.kind === "research"
+      ? researchRequest(context, step.task)
+      : step.kind === "combine"
+        ? combineRequest(context)
+        : step.kind === "critique"
+          ? critiqueRequest(context)
+          : step.kind === "recheck"
+            ? recheckRequest(context)
+            : synthesisRequest(context);
   if (!request) return { ok: false, reason: "that task isn't in the plan", usage: null };
   const reply = await provider.generateStructured({ ...request, maxOutputTokens: MAX_OUTPUT_TOKENS, ...(signal ? { signal } : {}) });
   if (!reply.ok) return reply;
@@ -126,6 +178,14 @@ export async function runAgentStep(provider: AiProvider, context: StepContext, s
     case "research": {
       const parsed = ResearchResultSchema.safeParse(reply.value);
       return parsed.success ? { ok: true, kind: "research", result: parsed.data, usage: reply.usage } : invalid;
+    }
+    case "combine": {
+      const parsed = CombineResultSchema.safeParse(reply.value);
+      return parsed.success ? { ok: true, kind: "combine", result: parsed.data, usage: reply.usage } : invalid;
+    }
+    case "recheck": {
+      const parsed = RecheckResultSchema.safeParse(reply.value);
+      return parsed.success ? { ok: true, kind: "recheck", result: parsed.data, usage: reply.usage } : invalid;
     }
     case "critique": {
       const parsed = CritiqueResultSchema.safeParse(reply.value);

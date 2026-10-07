@@ -227,6 +227,7 @@ export const UAE_TIMELINE: Record<string, StoryBeat> = {
       summary("possibility", "Best fit: local partner", "Fits the budget and slow sales"),
     ],
   },
+  "vex-at-costs": { items: [{ type: "agent_collaboration_started", agentIds: ["sage", "vex"], moduleId: "economics" }] },
   "lume-at-core": { items: [{ type: "agent_collaboration_started", agentIds: ["lume", "nova"], moduleId: null }] },
   synthesis: { summary: "Nova and Lume are putting the answer together.", items: [{ type: "synthesis_started", agentIds: ["nova", "lume"] }] },
   recommendation: {

@@ -7,7 +7,10 @@ import {
   LIVE_LIMITS,
   StepResponseSchema,
   type AgentStep,
+  doubtedTask,
+  type CombineResult,
   type CritiqueResult,
+  type RecheckResult,
   type ResearchResult,
   type StepResponse,
   type SynthesisResult,
@@ -19,10 +22,11 @@ import { createScheduler, type Scheduler, type SchedulerEvent, type TaskOutcome 
 /**
  * Live runtime for a question typed by the user. The user's question is recorded; Nova walks to the Core
  * and plans while the real planner call is in flight; the accepted plan opens its stations and sends the
- * agents to them. Then the team works (user choice 2026-10-07): each agent with a task researches from the
- * model's general knowledge (at most two at a time), Vex challenges the weakest point, and Lume and Nova
- * agree on a tentative answer. Every result is unverified model evidence. Without a server run id, the
- * team waits at its stations instead.
+ * agents to them. Then the team works (user choices 2026-10-07): each agent with a task researches from the
+ * model's general knowledge, hands the finding to Sage at the Core, who combines them and briefs Vex; Vex
+ * challenges the weakest point and may send one finding back for a re-check; Lume and Nova agree on a
+ * tentative answer. Every result is unverified model evidence. Without a server run id, the team waits at
+ * its stations instead.
  *
  * Replies arrive asynchronously but are acted on inside `step`, so everything happens on the run clock.
  * Like the demo runtime, it only publishes events and proposes operations through the gate.
@@ -39,8 +43,9 @@ const ASSIGN_GAP = 0.35;
 const SHOW_DONE = 1.2;
 const HOME_DELAY = 2.5;
 /** Longest the team may work after the plan before the run stops, so nothing can wait forever. */
-const WORK_DEADLINE = 150;
+const WORK_DEADLINE = 240;
 export const WAITING_SUMMARY = "The plan is ready. Live research isn't connected yet, so the team waits at its stations.";
+const ANALYST = "sage";
 const CRITIC = "vex";
 const SYNTHESIZER = "lume";
 
@@ -53,7 +58,7 @@ export interface LiveQuestion {
   dispose(): void;
 }
 
-type StepValue = ResearchResult | CritiqueResult | SynthesisResult;
+type StepValue = ResearchResult | CombineResult | CritiqueResult | RecheckResult | SynthesisResult;
 
 const isSettled = (status: string | undefined) => status === "succeeded" || status === "failed" || status === "skipped";
 const planner: Provenance = { kind: "model", label: "Planner", agentId: PLANNER_AGENT };
@@ -93,9 +98,9 @@ export function createLiveQuestion(
   const propose = (operation: Record<string, unknown>, name: string, as: Provenance, summary?: string) =>
     gate.submit({ ...operation, id: id(name) }, summary ? { as, summary } : { as }).ok;
   const later = (seconds: number, run: () => void) => timers.push({ at: now() + seconds, run });
-  const send = (agentId: string, target: { kind: "core" } | { kind: "home" } | { kind: "module"; moduleId: string }, task: string) => {
+  const send = (agentId: string, target: { kind: "core" } | { kind: "home" } | { kind: "module"; moduleId: string }, task: string, travel?: "retrying") => {
     at.delete(agentId);
-    publish({ type: "agent_assigned", agentId, target, task, travel: target.kind === "home" ? "returning" : "moving" });
+    publish({ type: "agent_assigned", agentId, target, task, travel: travel ?? (target.kind === "home" ? "returning" : "moving") });
   };
 
   function fail(reason: string) {
@@ -164,7 +169,35 @@ export function createLiveQuestion(
   };
   const usageInbox: { step: AgentStep; usage: StepResponse["usage"] }[] = [];
 
-  /** The team's work after planning, as scheduled tasks: research, then the critic, then the answer. */
+  /** Data cards in flight between agents, by artifact id, with what happens when each lands. */
+  const handoffs = new Map<string, { from: string; to: string; landed: () => void }>();
+  let handoffCount = 0;
+  const handingTo = (agentId: string) => [...handoffs.values()].some((handoff) => handoff.to === agentId);
+  const handingFrom = (agentId: string) => [...handoffs.values()].some((handoff) => handoff.from === agentId);
+  function handOver(from: string, to: string, kind: "evidence" | "insight" | "flag", task: string, landed: () => void) {
+    const artifactId = id(`card${(handoffCount += 1)}`);
+    handoffs.set(artifactId, { from, to, landed });
+    publish({ type: "artifact_handoff_started", artifactId, kind, from, to, task: task.slice(0, 200) });
+  }
+
+  const moduleOf = (task: number) => (plan ? (moduleIds[plan.modules.findIndex((mod) => mod.key === plan!.tasks[task]?.module)] ?? null) : null);
+  const agentFor = (step: AgentStep) =>
+    step.kind === "research"
+      ? (plan!.tasks[step.task]?.agent ?? PLANNER_AGENT)
+      : step.kind === "combine"
+        ? ANALYST
+        : step.kind === "critique"
+          ? CRITIC
+          : step.kind === "recheck"
+            ? (plan!.tasks[recheckTask ?? -1]?.agent ?? CRITIC)
+            : SYNTHESIZER;
+  /** The finding Vex sent back for a re-check, once he has. */
+  let recheckTask: number | null = null;
+
+  /**
+   * The team's work after planning, as scheduled tasks: research; Sage combines what was handed to her;
+   * Vex reviews; a re-check if he sends a finding back; then the answer.
+   */
   function scheduleWork(assignments: typeof queue) {
     const work = createScheduler<StepValue>({
       concurrency: LIVE_LIMITS.concurrency,
@@ -178,31 +211,63 @@ export function createLiveQuestion(
       work.add({ id: taskId, ready: () => at.get(assignment.agentId) === assignment.moduleId, run: ask({ kind: "research", task }) });
       return taskId;
     });
-    work.add({ id: "critique", dependsOn: research, needs: "any", ready: () => at.get(CRITIC) === "core", run: ask({ kind: "critique" }) });
+    work.add({ id: "combine", dependsOn: research, needs: "any", ready: () => at.get(ANALYST) === "core" && gathered && !handingTo(ANALYST), run: ask({ kind: "combine" }) });
+    work.add({
+      id: "critique",
+      dependsOn: research,
+      needs: "any",
+      ready: () => at.get(CRITIC) === "core" && isSettled(work.status("combine")) && !handingTo(CRITIC),
+      run: ask({ kind: "critique" }),
+    });
     work.add({
       id: "synthesis",
       dependsOn: research,
       needs: "any",
-      ready: () => at.get(SYNTHESIZER) === "core" && isSettled(work.status("critique")),
+      ready: () => at.get(SYNTHESIZER) === "core" && isSettled(work.status("critique")) && (recheckTask === null || isSettled(work.status("recheck"))),
       run: ask({ kind: "synthesis" }),
     });
     scheduler = work;
   }
 
+  function sendBackForRecheck(task: number) {
+    const researcher = plan!.tasks[task]!.agent;
+    const moduleId = moduleOf(task);
+    recheckTask = task;
+    scheduler!.add({ id: "recheck", ready: () => moduleId !== null && at.get(researcher) === moduleId, run: ask({ kind: "recheck" }) });
+    publish({ type: "retry_requested", by: CRITIC, agentId: researcher, assumptionId: null });
+    const goBack = () => moduleId && send(researcher, { kind: "module", moduleId }, "going back to double-check", "retrying");
+    if (researcher === CRITIC) return goBack();
+    handOver(CRITIC, researcher, "flag", `asking ${nameOf(researcher)} to double-check`, () => {
+      goBack();
+      send(CRITIC, { kind: "home" }, "heading back");
+    });
+  }
+
   function onWork(event: SchedulerEvent<StepValue>) {
     if (!plan) return;
-    const [kind, index] = event.id.split("-") as [string, string | undefined];
-    const task = index === undefined ? -1 : Number(index);
+    const [kind, index] = event.id.split("-") as [AgentStep["kind"], string | undefined];
+    const task = kind === "research" ? Number(index) : kind === "recheck" ? (recheckTask ?? -1) : -1;
     const assignment = task >= 0 ? plan.tasks[task] : undefined;
-    const agentId = kind === "critique" ? CRITIC : kind === "synthesis" ? SYNTHESIZER : (assignment?.agent ?? PLANNER_AGENT);
-    const moduleId = task >= 0 ? (moduleIds[plan.modules.findIndex((mod) => mod.key === assignment?.module)] ?? null) : null;
+    const agentId = kind === "research" ? (assignment?.agent ?? PLANNER_AGENT) : agentFor({ kind } as AgentStep);
+    const moduleId = task >= 0 ? moduleOf(task) : null;
+    const WHAT: Record<AgentStep["kind"], string> = {
+      research: assignment?.task ?? "the task",
+      combine: "putting the findings together",
+      critique: "reviewing the findings",
+      recheck: "double-checking the finding",
+      synthesis: "writing the answer",
+    };
 
     if (event.type === "started") {
       if (kind === "research") {
         const base = { agentId, task: assignment!.task, moduleId };
         publish(event.attempt > 1 ? { type: "retry_started", ...base } : { type: "agent_work_started", activity: "working", ...base });
+      } else if (kind === "combine") {
+        publish({ type: "agent_work_started", agentId, activity: "working", task: "putting the findings together", moduleId: null });
       } else if (kind === "critique") {
         publish({ type: "agent_work_started", agentId, activity: "evaluating", task: "looking for the weakest point", moduleId: null });
+      } else if (kind === "recheck") {
+        publish({ type: "retry_started", agentId, task: "double-checking the finding Vex doubted", moduleId });
       } else {
         publish({ type: "agent_collaboration_started", agentIds: [SYNTHESIZER, PLANNER_AGENT], moduleId: null });
         publish({ type: "synthesis_started", agentIds: [SYNTHESIZER, PLANNER_AGENT], summary: "Lume and Nova are putting a tentative answer together." });
@@ -213,9 +278,9 @@ export function createLiveQuestion(
     }
 
     if (event.type === "failed") {
-      const what = kind === "research" ? assignment!.task : kind === "critique" ? "reviewing the findings" : "writing the answer";
-      const task = event.willRetry ? `stuck (${event.reason}); trying again shortly` : `stuck: ${event.reason}`;
-      publish({ type: "task_failed", agentId, task: task.slice(0, 200), moduleId, ...(event.willRetry ? {} : { summary: `${nameOf(agentId)} couldn't finish ${what}: ${event.reason}.`.slice(0, 240) }) });
+      const what = WHAT[kind];
+      const stuck = event.willRetry ? `stuck (${event.reason}); trying again shortly` : `stuck: ${event.reason}`;
+      publish({ type: "task_failed", agentId, task: stuck.slice(0, 200), moduleId, ...(event.willRetry ? {} : { summary: `${nameOf(agentId)} couldn't finish ${what}: ${event.reason}.`.slice(0, 240) }) });
       return;
     }
 
@@ -224,12 +289,13 @@ export function createLiveQuestion(
       return;
     }
 
+    const source = { kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false } as const;
     if (kind === "research") {
       const result = event.value as ResearchResult;
       const evidenceId = id(`ev${task + 1}`);
       const as = asModel(agentId, "Researcher");
       const added = propose(
-        { operation: "add_evidence", evidence: { id: evidenceId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source: { kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false } } },
+        { operation: "add_evidence", evidence: { id: evidenceId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source } },
         `finding-${task}`,
         as,
         `${nameOf(agentId)}: ${result.finding}`.slice(0, 240),
@@ -239,26 +305,61 @@ export function createLiveQuestion(
       publish({ type: "task_completed", agentId, task: assignment!.task, moduleId });
       const station = at.get(agentId);
       later(SHOW_DONE, () => {
-        // A waiting state stops the agent, so skip it if they've been sent somewhere since.
-        if (at.get(agentId) === station) publish({ type: "agent_waiting", agentId, task: "done; waiting for the team" });
+        // A waiting state stops the agent, so skip it if they've been sent somewhere since or are handing over.
+        if (at.get(agentId) === station && !handingFrom(agentId)) publish({ type: "agent_waiting", agentId, task: "done; waiting for the team" });
       });
+    } else if (kind === "combine") {
+      const result = event.value as CombineResult;
+      propose(
+        { operation: "add_evidence", evidence: { id: id("combined"), statement: result.insight, kind: "fact", moduleId: null, foundBy: ANALYST, source } },
+        "combined",
+        asModel(ANALYST, "Analyst"),
+        `Sage puts it together: ${result.insight}`.slice(0, 240),
+      );
+      publish({ type: "task_completed", agentId: ANALYST, task: "put the findings together", moduleId: null });
     } else if (kind === "critique") {
       const result = event.value as CritiqueResult;
       const as = asModel(CRITIC, "Critic");
       const summary = `Vex pushes back: ${result.note}`.slice(0, 240);
       const assumption = /^a\d$/.test(result.target) ? assumptionIds[Number(result.target.slice(1)) - 1] : undefined;
-      const finding = /^f\d$/.test(result.target) ? Number(result.target.slice(1)) - 1 : -1;
+      const doubted = doubtedTask(result);
       if (assumption) propose({ operation: "challenge_assumption", assumptionId: assumption, by: CRITIC, note: result.note }, "challenge", as, summary);
-      else if (finding >= 0) {
-        const findingModule = moduleIds[plan.modules.findIndex((mod) => mod.key === plan!.tasks[finding]?.module)] ?? null;
+      else if (doubted !== null && evidenceFor.has(doubted) && plan.tasks[doubted]) {
         propose(
-          { operation: "add_evidence", evidence: { id: id("doubt"), statement: result.note, kind: "risk", moduleId: findingModule, foundBy: CRITIC, source: { kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false } } },
+          { operation: "add_evidence", evidence: { id: id("doubt"), statement: result.note, kind: "risk", moduleId: moduleOf(doubted), foundBy: CRITIC, source } },
           "doubt",
           as,
           summary,
         );
+        sendBackForRecheck(doubted);
       }
-      publish({ type: "task_completed", agentId: CRITIC, task: result.target === "none" ? "found no serious weak spot" : "noting the doubt", moduleId: null, ...(result.target === "none" ? { summary: "Vex found no serious weak spot." } : {}) });
+      const none = result.target === "none";
+      publish({ type: "task_completed", agentId: CRITIC, task: none ? "found no serious weak spot" : "noting the doubt", moduleId: null, ...(none ? { summary: "Vex found no serious weak spot." } : {}) });
+      if (recheckTask === null) later(SHOW_DONE, () => send(CRITIC, { kind: "home" }, "heading back"));
+    } else if (kind === "recheck") {
+      const result = event.value as RecheckResult;
+      const as = asModel(agentId, "Researcher");
+      const previous = evidenceFor.get(task);
+      const why = (evidenceId: string) => ({ reason: "Re-checked after Vex's doubt.", evidenceIds: [evidenceId], agentId });
+      let current = previous;
+      if (result.verdict === "revised" && previous) {
+        const revisedId = id(`ev${task + 1}-rechecked`);
+        const added = propose(
+          { operation: "add_evidence", evidence: { id: revisedId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source } },
+          `finding-${task}-rechecked`,
+          as,
+          `${nameOf(agentId)} re-checked and revised it: ${result.finding}`.slice(0, 240),
+        );
+        if (added) {
+          propose({ operation: "remove_evidence", evidenceId: previous, supersededBy: revisedId, why: why(revisedId) }, `finding-${task}-replaced`, as);
+          evidenceFor.set(task, revisedId);
+          current = revisedId;
+          if (moduleId) propose({ operation: "update_module", moduleId, changes: { summary: { headline: result.headline, detail: result.detail } } }, `summary-${task}-rechecked`, as);
+        }
+      }
+      if (current) propose({ operation: "remove_evidence", evidenceId: id("doubt"), supersededBy: current, why: why(current) }, "doubt-answered", as);
+      const stands = result.verdict === "kept";
+      publish({ type: "task_completed", agentId, task: stands ? "the finding stands" : "revised the finding", moduleId, ...(stands ? { summary: `${nameOf(agentId)} re-checked: the finding stands.` } : {}) });
     } else {
       const result = event.value as SynthesisResult;
       const evidenceIds = result.basis.flatMap((key) => evidenceFor.get(Number(key.slice(1)) - 1) ?? []);
@@ -281,20 +382,45 @@ export function createLiveQuestion(
     }
   }
 
-  /** Moves the critic and the synthesizer to the Core once their inputs are settled. */
+  /** Moves Sage, Vex and Lume to the Core once their inputs are settled. */
+  let analystSent = false;
+  let gathered = false;
   let criticSent = false;
   let synthesizerSent = false;
   function direct() {
     const work = scheduler!;
     const researchDone = plan!.tasks.every((_, task) => isSettled(work.status(`research-${task}`)));
-    if (researchDone && !criticSent && work.status("critique") === "pending") {
-      criticSent = true;
-      send(CRITIC, { kind: "core" }, "going to review the team's findings");
+    if (researchDone && !analystSent && work.status("combine") === "pending") {
+      analystSent = true;
+      send(ANALYST, { kind: "core" }, "collecting the team's findings");
     }
-    if (isSettled(work.status("critique")) && !synthesizerSent && work.status("synthesis") === "pending") {
+    if (isSettled(work.status("combine")) && !criticSent && work.status("critique") === "pending") {
+      criticSent = true;
+      send(CRITIC, { kind: "core" }, "going to review the team's work");
+    }
+    const recheckDone = recheckTask === null || isSettled(work.status("recheck"));
+    if (isSettled(work.status("critique")) && recheckDone && !synthesizerSent && work.status("synthesis") === "pending") {
       synthesizerSent = true;
       send(SYNTHESIZER, { kind: "core" }, "heading to the center to agree on an answer");
     }
+  }
+
+  /** Sage has reached the Core: everyone else with a finding hands it to her, then heads home. */
+  function gather() {
+    gathered = true;
+    publish({ type: "agent_waiting", agentId: ANALYST, task: "collecting the team's findings" });
+    for (const [task, assignment] of plan!.tasks.entries()) {
+      if (assignment.agent === ANALYST || !evidenceFor.has(task)) continue;
+      handOver(assignment.agent, ANALYST, "evidence", "handing my finding to Sage", () => send(assignment.agent, { kind: "home" }, "handed over; heading back"));
+    }
+  }
+
+  /** Vex has reached the Core: Sage hands him the combined picture, or simply heads home. */
+  function brief() {
+    publish({ type: "agent_waiting", agentId: CRITIC, task: "waiting for a turn to review" });
+    if (scheduler!.status("combine") === "succeeded" && at.get(ANALYST) === "core") {
+      handOver(ANALYST, CRITIC, "insight", "handing the combined picture to Vex", () => send(ANALYST, { kind: "home" }, "heading back"));
+    } else if (at.get(ANALYST) === "core") send(ANALYST, { kind: "home" }, "heading back");
   }
 
   function wrapUp() {
@@ -305,7 +431,7 @@ export function createLiveQuestion(
       publish({ type: "run_waiting", reason: reason.slice(0, 240), summary: `The team stopped: ${reason}.`.slice(0, 240) });
     }
     later(HOME_DELAY, () => {
-      for (const agentId of new Set([PLANNER_AGENT, ...plan!.tasks.map((task) => task.agent), CRITIC, SYNTHESIZER])) {
+      for (const agentId of new Set([PLANNER_AGENT, ...plan!.tasks.map((task) => task.agent), ANALYST, CRITIC, SYNTHESIZER])) {
         if (at.get(agentId) !== "home") send(agentId, { kind: "home" }, "heading back");
       }
     });
@@ -323,7 +449,7 @@ export function createLiveQuestion(
     publish({ type: "run_waiting", reason: "research tools aren't connected yet", summary: WAITING_SUMMARY });
   }
 
-  const unsubscribe = bus.on("agent_arrived", (event) => {
+  const offArrived = bus.on("agent_arrived", (event) => {
     if (event.cycle !== cycle) return;
     const where = event.target.kind === "module" ? event.target.moduleId : event.target.kind;
     at.set(event.agentId, where);
@@ -331,16 +457,26 @@ export function createLiveQuestion(
       publish({ type: "agent_idle", agentId: event.agentId, task: phase === "answered" ? "done for now" : "ready" });
       return;
     }
-    if (event.agentId === CRITIC && event.target.kind === "core" && phase === "working") {
-      publish({ type: "agent_waiting", agentId: CRITIC, task: "waiting for a turn to review" });
+    const working = phase === "working" || phase === "assigning";
+    if (event.target.kind === "core" && working && scheduler) {
+      if (event.agentId === ANALYST && analystSent && !gathered) return gather();
+      if (event.agentId === CRITIC && criticSent) return brief();
+      if (event.agentId === SYNTHESIZER && synthesizerSent) return void publish({ type: "agent_waiting", agentId: SYNTHESIZER, task: "waiting for a turn to answer" });
     }
-    if (event.agentId === SYNTHESIZER && event.target.kind === "core" && phase === "working") {
-      publish({ type: "agent_waiting", agentId: SYNTHESIZER, task: "waiting for a turn to answer" });
+    if (event.target.kind === "module" && recheckTask !== null && plan!.tasks[recheckTask]?.agent === event.agentId) {
+      return void publish({ type: "agent_waiting", agentId: event.agentId, task: "about to double-check" });
     }
     const task = travelling.get(event.agentId);
     if (task === undefined || event.target.kind !== "module") return;
     travelling.delete(event.agentId);
     publish({ type: "agent_waiting", agentId: event.agentId, task: scheduler ? "waiting for a turn" : task });
+  });
+  const offLanded = bus.on("artifact_handoff_completed", (event) => {
+    if (event.cycle !== cycle) return;
+    const handoff = handoffs.get(event.artifactId);
+    if (!handoff) return;
+    handoffs.delete(event.artifactId);
+    handoff.landed();
   });
 
   return {
@@ -367,10 +503,7 @@ export function createLiveQuestion(
       settleIfWaiting();
       if (scheduler && (phase === "assigning" || phase === "working")) {
         const events = scheduler.step(time);
-        for (const { step, usage } of usageInbox.splice(0)) {
-          const agentId = step.kind === "critique" ? CRITIC : step.kind === "synthesis" ? SYNTHESIZER : (plan!.tasks[step.task]?.agent ?? PLANNER_AGENT);
-          recordUsage(agentId, step.kind, usage);
-        }
+        for (const { step, usage } of usageInbox.splice(0)) recordUsage(agentFor(step), step.kind, usage);
         events.forEach(onWork);
         direct();
         if (!scheduler.settled && time >= deadline) {
@@ -392,7 +525,8 @@ export function createLiveQuestion(
     dispose() {
       controller.abort();
       scheduler?.cancel();
-      unsubscribe();
+      offArrived();
+      offLanded();
     },
   };
 }

@@ -11,6 +11,8 @@ import { sectorFramePoints } from "./sim/layout";
 import { AGENT_ORDER, homePosition } from "./sim/roster";
 import type { AgentId, World } from "./sim/types";
 import { Artifacts } from "./scene/artifacts";
+import { Collaborations } from "./scene/collaboration";
+import { FailedCards } from "./scene/failed-cards";
 import { Chamber } from "./scene/chamber";
 import { Character } from "./scene/character";
 import { IntentCore } from "./scene/intent-core";
@@ -287,6 +289,8 @@ export default function LabScene({
         <Character key={id} id={id} worldRef={worldRef} selected={selected === id} onSelect={onSelect} />
       ))}
       <Artifacts worldRef={worldRef} />
+      <Collaborations worldRef={worldRef} />
+      <FailedCards worldRef={worldRef} />
       <TagProjector worldRef={worldRef} registry={tags} />
       <CameraFocus worldRef={worldRef} selected={selected} />
       <EffectComposer multisampling={quality === "high" ? 4 : 0}>

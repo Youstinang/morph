@@ -1,4 +1,5 @@
 import { parseEnvironment } from "@/config/environment";
+import { LIVE_LIMITS } from "@/state/live-work";
 import { createOpenAiProvider } from "./providers/openai";
 import type { AiProvider } from "./providers/types";
 import { createRateLimiter, type RateLimiter } from "./rate-limit";
@@ -27,5 +28,7 @@ export function liveServices(): LiveServices {
 
 export function liveProvider(): AiProvider | null {
   const env = parseEnvironment(process.env);
-  return env.OPENAI_API_KEY ? createOpenAiProvider({ apiKey: env.OPENAI_API_KEY, model: env.MORPH_PLANNER_MODEL }) : null;
+  if (!env.OPENAI_API_KEY) return null;
+  // Ends a call just before the browser gives up on the task, so the server's answer can still arrive.
+  return createOpenAiProvider({ apiKey: env.OPENAI_API_KEY, model: env.MORPH_PLANNER_MODEL, timeoutMs: LIVE_LIMITS.taskSeconds * 1000 - 2000 });
 }

@@ -179,6 +179,33 @@ export interface ArtifactFlight {
   duration: number;
 }
 
+/** An agent catching a landed data card; drives the catch pulse. */
+export interface ArtifactCatch {
+  agentId: AgentId;
+  kind: ArtifactKind;
+  from: AgentId;
+  at: number;
+}
+
+/**
+ * The card an agent was working on when its task failed. It stays at the station, cracked and grey, until
+ * the agent finishes that work, then fades.
+ */
+export interface FailedCard {
+  agentId: AgentId;
+  zone: ModuleId | null;
+  position: Vec2;
+  failedAt: number;
+  clearedAt: number | null;
+}
+
+/** Agents working together at one place, with the point their shared hologram floats over. */
+export interface Collaboration {
+  agents: AgentId[];
+  hub: Vec2;
+  atCore: boolean;
+}
+
 export interface LogEntry {
   id: number;
   time: number;
@@ -220,6 +247,9 @@ export interface World {
   /** Bumped whenever modules are added, removed or re-laid out. */
   layoutVersion: number;
   artifacts: ArtifactFlight[];
+  /** Recent catches, kept briefly for the catch pulse. */
+  catches: ArtifactCatch[];
+  failedCards: FailedCard[];
   story: StoryView;
   /** The latest reshuffle, if any. */
   morph: WorldMorph | null;
