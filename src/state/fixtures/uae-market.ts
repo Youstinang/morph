@@ -81,6 +81,27 @@ const summary = (moduleId: DemoModuleId, headline: string, detail: string): Oper
 const evidence = (item: NewEvidenceInput): OperationDraft => ({ operation: "add_evidence", evidence: item });
 type NewEvidenceInput = Extract<OperationDraft, { operation: "add_evidence" }>["evidence"];
 const scenarioIds = Object.keys(SCENARIO_LABELS) as ScenarioKey[];
+/** What each path offers and risks, and the findings it rests on before and after the deal-time check. */
+const PATHS: Record<ScenarioKey, { why: string; risk: string; first: string[]; after: string[] }> = {
+  direct: {
+    why: "Full control of customers, pricing and the product.",
+    risk: "The money has to last until the first big deals close.",
+    first: ["ev-demand"],
+    after: ["ev-demand", "ev-sales-cycle", "ev-budget"],
+  },
+  partnership: {
+    why: "A partner brings customers and can keep data inside the UAE.",
+    risk: "Shares the margin and some control.",
+    first: ["ev-data-residency"],
+    after: ["ev-data-residency", "ev-rivals", "ev-sales-cycle"],
+  },
+  delay: {
+    why: "Keeps the money while the market matures.",
+    risk: "Local rivals may lock in the big buyers first.",
+    first: ["ev-rivals"],
+    after: ["ev-rivals", "ev-cash-risk"],
+  },
+};
 const weights = (direct: number, partnership: number, delay: number) => ({ direct, partnership, delay });
 
 /** The story moments every ending shares. Demo data only. */
@@ -166,7 +187,10 @@ const BASE_TIMELINE: Record<string, StoryBeat> = {
     by: "lume",
     items: [
       ...scenarioIds.map(
-        (id): OperationDraft => ({ operation: "add_scenario", scenario: { id, label: SCENARIO_LABELS[id], assessment: weights(0.38, 0.36, 0.26)[id] } }),
+        (id): OperationDraft => ({
+          operation: "add_scenario",
+          scenario: { id, label: SCENARIO_LABELS[id], assessment: weights(0.38, 0.36, 0.26)[id], why: PATHS[id].why, risk: PATHS[id].risk, evidenceIds: PATHS[id].first },
+        }),
       ),
       summary("possibility", "3 options on the table", "Go alone · Partner · Wait"),
     ],
@@ -329,7 +353,9 @@ function endingBeats(text: EndingText): Record<string, StoryBeat> {
       summary: text.shiftSummary,
       by: "lume",
       items: [
-        ...scenarioIds.map((id): OperationDraft => ({ operation: "update_scenario", scenarioId: id, assessment: weights(...text.shiftWeights)[id] })),
+        ...scenarioIds.map(
+          (id): OperationDraft => ({ operation: "update_scenario", scenarioId: id, assessment: weights(...text.shiftWeights)[id], evidenceIds: PATHS[id].after }),
+        ),
         {
           operation: "update_recommendation",
           recommendation: { status: "forming", leaning: text.leaning, statement: null, reason: null, confidence: "moderate", evidenceIds: BASIS },

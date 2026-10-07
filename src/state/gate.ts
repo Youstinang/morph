@@ -52,8 +52,8 @@ export function operationEvents(o: MorphOperation, after: Workspace): EventDraft
     case "add_scenario":
     case "update_scenario": {
       const id = o.operation === "add_scenario" ? o.scenario.id : o.scenarioId;
-      const { label, assessment } = after.scenarios.find((scenario) => scenario.id === id)!;
-      return [{ type: o.operation === "add_scenario" ? "scenario_created" : "scenario_updated", scenario: { id, label, assessment } }];
+      const { label, assessment, why, risk, evidenceIds } = after.scenarios.find((scenario) => scenario.id === id)!;
+      return [{ type: o.operation === "add_scenario" ? "scenario_created" : "scenario_updated", scenario: { id, label, assessment, why, risk, evidenceIds } }];
     }
     case "update_recommendation":
       return [{ type: "recommendation_updated", recommendation: o.recommendation }];

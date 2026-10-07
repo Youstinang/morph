@@ -216,6 +216,16 @@ describe("applyMorphOperation", () => {
     expect(chain(ws, { operation: "update_scenario", id: id(), source: demo, scenarioId: "a", assessment: 0.7 }).scenarios[0]!.assessment).toBe(0.7);
   });
 
+  it("lets a path rest only on accepted findings, and records its reason and risk", () => {
+    const ws = chain(createUaeWorkspace(), ops.evidence("a"), ops.evidence("b"), { operation: "remove_evidence", id: id(), source: demo, evidenceId: "a", supersededBy: "b", why });
+    const path = { id: "p", label: "Partner", assessment: 0.5, why: "Brings customers.", risk: "Shares the margin." };
+    expect(refusal(ws, { operation: "add_scenario", id: id(), source: demo, scenario: { ...path, evidenceIds: ["a"] } })).toBe("evidence a does not exist");
+    expect(refusal(ws, { operation: "add_scenario", id: id(), source: demo, scenario: { ...path, evidenceIds: ["zz"] } })).toBe("evidence zz does not exist");
+    const added = chain(ws, { operation: "add_scenario", id: id(), source: demo, scenario: { ...path, evidenceIds: ["b"] } });
+    expect(added.scenarios[0]).toMatchObject({ why: "Brings customers.", risk: "Shares the margin.", evidenceIds: ["b"] });
+    expect(chain(added, { operation: "update_scenario", id: id(), source: demo, scenarioId: "p", assessment: 0.5, risk: "Slower decisions." }).scenarios[0]!.risk).toBe("Slower decisions.");
+  });
+
   it("assigns a task and records a camera focus suggestion", () => {
     const ws = chain(
       createUaeWorkspace(),

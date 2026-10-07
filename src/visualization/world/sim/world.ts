@@ -3,7 +3,7 @@ import type { AgentTarget, EventDraft, WorkspaceEvent } from "@/events/schema";
 import { createModule, moduleSpot, removeModule, applyModuleChange, stepModules } from "./modules";
 import { AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./roster";
 import { presentationFor } from "./presentation";
-import type { AgentId, AgentRuntime, AgentState, Collaboration, CoreState, ModuleHeadline, ModuleId, ScenarioWeights, StoryView, Vec2, World } from "./types";
+import type { AgentId, AgentRuntime, AgentState, Collaboration, CoreState, ModuleHeadline, ModuleId, ScenarioView, StoryView, Vec2, World } from "./types";
 
 export const WALK_SPEED = 3.4;
 export const ASSIGN_PAUSE = 0.55;
@@ -29,7 +29,8 @@ const emptyStory = (): StoryView => ({
   synthesisAt: null,
   answeredAt: null,
   openInputs: [],
-  scenarios: null,
+  scenarios: [],
+  scenarioShiftAt: null,
   waitingAt: null,
   failedAt: null,
 });
@@ -219,9 +220,14 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
       return;
     }
     case "scenario_created":
-    case "scenario_updated":
-      story.scenarios = { ...story.scenarios, [event.scenario.id]: event.scenario.assessment } as ScenarioWeights;
+    case "scenario_updated": {
+      const { id, label, assessment, risk, evidenceIds } = event.scenario;
+      const view: ScenarioView = { id, label, weight: assessment, evidence: evidenceIds?.length ?? 0, risk: risk ?? null };
+      const known = story.scenarios.some((item) => item.id === id);
+      story.scenarios = known ? story.scenarios.map((item) => (item.id === id ? view : item)) : [...story.scenarios, view];
+      if (event.type === "scenario_updated") story.scenarioShiftAt = world.time;
       return;
+    }
     default:
       return;
   }
@@ -411,8 +417,15 @@ export function coreState(world: World): CoreState {
   return "dormant";
 }
 
-export function scenarioWeights(world: World): ScenarioWeights | null {
-  return world.story.scenarios;
+/** The paths on the Possibility Engine, or null before any are laid out. */
+export function scenarioViews(world: World): readonly ScenarioView[] | null {
+  return world.story.scenarios.length > 0 ? world.story.scenarios : null;
+}
+
+/** The path the team currently rates highest, if one stands out. */
+export function leadingScenario(world: World): string | null {
+  const [first, second] = [...world.story.scenarios].sort((a, b) => b.weight - a.weight);
+  return first && (!second || first.weight - second.weight >= 0.04) ? first.id : null;
 }
 
 /** Who is waiting on the user for an answer, if anyone. */

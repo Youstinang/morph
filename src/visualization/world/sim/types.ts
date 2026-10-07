@@ -215,10 +215,14 @@ export interface LogEntry {
   beat: boolean;
 }
 
-export interface ScenarioWeights {
-  direct: number;
-  partnership: number;
-  delay: number;
+/** One possible path as the Possibility Engine shows it. `weight` is the team's assessment, not a probability. */
+export interface ScenarioView {
+  id: string;
+  label: string;
+  weight: number;
+  /** How many findings the path rests on, and its main risk. */
+  evidence: number;
+  risk: string | null;
 }
 
 /** The user's answer travelling from the asker's question panel into the Core. */
@@ -238,7 +242,9 @@ export interface StoryView {
   answeredAt: number | null;
   /** Questions waiting for the user, and who asked the oldest one; the question panel stands beside them. */
   openInputs: { requestId: string; askedBy: AgentId }[];
-  scenarios: ScenarioWeights | null;
+  /** The paths in the order they were laid out, and when their weights last shifted. */
+  scenarios: ScenarioView[];
+  scenarioShiftAt: number | null;
   /** The run is paused on something outside the team's reach, or has failed. */
   waitingAt: number | null;
   failedAt: number | null;

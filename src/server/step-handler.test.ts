@@ -13,9 +13,15 @@ const CRITIQUE = { target: "a1", headline: "Records may be thin", note: "Small b
 const COMBINE = { insight: "Reach grows, but fees eat the margin.", headline: "Fees eat margin" };
 const DOUBT = { target: "f1", headline: "Too rosy", note: "Commission levels vary a lot by app." };
 const RECHECK = { verdict: "revised", finding: "Commission varies by app and deal.", headline: "Fees vary", detail: "Depends on the app", kind: "risk" };
+const PATHS = {
+  paths: [
+    { label: "Try one app", assessment: 0.6, why: "Reach grows with little setup.", risk: "Fees eat the margin.", basis: ["f1", "f7"] },
+    { label: "Wait for now", assessment: 0.3, why: "No fees while you learn more.", risk: "Rivals take the app customers.", basis: [] },
+  ],
+};
 const SYNTHESIS = { statement: "Try one app for three months", reason: "Fees are high but reach grows.", confidence: "low", basis: ["f1", "f9"] };
 
-function setup(options: { cost?: number; fail?: boolean; critique?: unknown } = {}) {
+function setup(options: { cost?: number; fail?: boolean; critique?: unknown; paths?: unknown } = {}) {
   const asked: StructuredRequest[] = [];
   const provider: AiProvider = {
     name: "fake",
@@ -28,6 +34,7 @@ function setup(options: { cost?: number; fail?: boolean; critique?: unknown } = 
         morph_combine: COMBINE,
         morph_critique: options.critique ?? CRITIQUE,
         morph_recheck: RECHECK,
+        morph_paths: options.paths ?? PATHS,
         morph_synthesis: SYNTHESIS,
       };
       const value = replies[request.schemaName];
@@ -67,6 +74,33 @@ describe("/api/agent-step handler", () => {
     const answer = await (await step({ runId, step: { kind: "synthesis" } })).json();
     expect(answer).toMatchObject({ ok: true, kind: "synthesis", result: { statement: SYNTHESIS.statement, basis: ["f1"] } });
     expect(asked.at(-1)!.prompt).toContain(CRITIQUE.note);
+  });
+
+  it("weighs the paths once, only after Vex's review, and hands them to the answer", async () => {
+    const { ask, step, asked } = setup();
+    const runId = await ask();
+    await step({ runId, step: { kind: "research", task: 0 } });
+    expect(await (await step({ runId, step: { kind: "paths" } })).json()).toMatchObject({ ok: false, reason: "Vex hasn't reviewed the work yet" });
+    await step({ runId, step: { kind: "critique" } });
+    const paths = await (await step({ runId, step: { kind: "paths" } })).json();
+    expect(paths).toMatchObject({ ok: true, kind: "paths", result: { paths: [{ label: "Try one app", basis: ["f1"] }, { label: "Wait for now", basis: [] }] } });
+    expect(asked.at(-1)!.system).toContain("You are Lume");
+    expect(asked.at(-1)!.system).toContain("not a probability");
+    expect(asked.at(-1)!.prompt).toContain(CRITIQUE.note);
+    expect((await step({ runId, step: { kind: "paths" } })).status).toBe(409);
+    await step({ runId, step: { kind: "synthesis" } });
+    expect(asked.at(-1)!.prompt).toContain("Try one app (rated 0.60): Reach grows with little setup. Main risk: Fees eat the margin.");
+  });
+
+  it("refuses paths that repeat each other or fall outside the shape", async () => {
+    const same = { paths: [PATHS.paths[0], { ...PATHS.paths[1], label: "try ONE app" }] };
+    for (const paths of [same, { paths: [PATHS.paths[0]] }, { paths: [{ ...PATHS.paths[0], assessment: 1.4 }, PATHS.paths[1]] }]) {
+      const { ask, step } = setup({ paths });
+      const runId = await ask();
+      await step({ runId, step: { kind: "research", task: 0 } });
+      await step({ runId, step: { kind: "critique" } });
+      expect(await (await step({ runId, step: { kind: "paths" } })).json()).toMatchObject({ ok: false, reason: "the AI's reply didn't pass MORPH's checks" });
+    }
   });
 
   it("combines, re-checks the doubted finding, and answers from the revised one", async () => {

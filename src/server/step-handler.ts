@@ -54,6 +54,7 @@ export function createStepHandler(deps: StepHandlerDeps) {
     if (outcome.kind === "research" && step.kind === "research") run.findings.set(step.task, outcome.result);
     if (outcome.kind === "combine") run.combined = outcome.result;
     if (outcome.kind === "critique") run.critique = outcome.result;
+    if (outcome.kind === "paths") run.paths = outcome.result;
     if (outcome.kind === "synthesis") run.answer = outcome.result;
     if (outcome.kind === "recheck") {
       run.recheck = outcome.result;

@@ -34,7 +34,8 @@ const ModuleInputSchema = z
   .object({ id: Id, title: Line(60), kind: Id, group: ModuleGroupSchema, size: z.number().min(0.7).max(1.15).optional() })
   .strict();
 const SummarySchema = z.object({ headline: Line(60), detail: z.string().trim().max(120) }).strict();
-const ScenarioInputSchema = z.object({ id: Id, label: Line(60), assessment: z.number().min(0).max(1) }).strict();
+const ScenarioDetail = { why: Line(200).optional(), risk: Line(160).optional(), evidenceIds: z.array(Id).max(6).optional() };
+const ScenarioInputSchema = z.object({ id: Id, label: Line(60), assessment: z.number().min(0).max(1), ...ScenarioDetail }).strict();
 
 export const MorphOperationSchema = z.discriminatedUnion("operation", [
   op("set_objective", { objectiveId: Id, text: Line(600) }),
@@ -58,7 +59,7 @@ export const MorphOperationSchema = z.discriminatedUnion("operation", [
   op("update_assumption", { assumptionId: Id, status: z.enum(["confirmed", "rejected"]), evidenceId: Id.nullable() }),
 
   op("add_scenario", { scenario: ScenarioInputSchema }),
-  op("update_scenario", { scenarioId: Id, assessment: z.number().min(0).max(1), label: Line(60).optional() }),
+  op("update_scenario", { scenarioId: Id, assessment: z.number().min(0).max(1), label: Line(60).optional(), ...ScenarioDetail }),
   op("update_recommendation", { recommendation: RecommendationSchema.omit({ updatedAt: true }).strict() }),
 
   op("request_human_input", { requestId: Id, question: Line(600), askedBy: Id, control: InputControlSchema.optional() }),
@@ -177,7 +178,13 @@ function transition(ws: Workspace, o: MorphOperation): t.Transition {
     case "add_scenario":
       return t.addScenario(ws, o.scenario);
     case "update_scenario":
-      return t.updateScenario(ws, o.scenarioId, o.label === undefined ? { assessment: o.assessment } : { assessment: o.assessment, label: o.label });
+      return t.updateScenario(ws, o.scenarioId, {
+        assessment: o.assessment,
+        ...(o.label === undefined ? {} : { label: o.label }),
+        ...(o.why === undefined ? {} : { why: o.why }),
+        ...(o.risk === undefined ? {} : { risk: o.risk }),
+        ...(o.evidenceIds === undefined ? {} : { evidenceIds: o.evidenceIds }),
+      });
     case "update_recommendation":
       return t.setRecommendation(ws, o.recommendation);
     case "request_human_input":

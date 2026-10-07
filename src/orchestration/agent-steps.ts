@@ -2,6 +2,7 @@ import type { AiProvider, ModelUsage } from "@/server/providers/types";
 import {
   CombineResultSchema,
   CritiqueResultSchema,
+  PathsResultSchema,
   RecheckResultSchema,
   ResearchResultSchema,
   SynthesisResultSchema,
@@ -11,6 +12,7 @@ import {
   type AgentStep,
   type CombineResult,
   type CritiqueResult,
+  type PathsResult,
   type RecheckResult,
   type ResearchResult,
   type QuestionReply,
@@ -33,6 +35,7 @@ export interface StepContext {
   combined: CombineResult | null;
   critique: CritiqueResult | null;
   recheck: RecheckResult | null;
+  paths: PathsResult | null;
   /** The user's replies to Nova's questions, by question. */
   replies: ReadonlyMap<number, QuestionReply>;
 }
@@ -42,6 +45,7 @@ export type StepOutcome =
   | { ok: true; kind: "combine"; result: CombineResult; usage: ModelUsage }
   | { ok: true; kind: "critique"; result: CritiqueResult; usage: ModelUsage }
   | { ok: true; kind: "recheck"; result: RecheckResult; usage: ModelUsage }
+  | { ok: true; kind: "paths"; result: PathsResult; usage: ModelUsage }
   | { ok: true; kind: "synthesis"; result: SynthesisResult; usage: ModelUsage }
   | { ok: false; reason: string; usage: ModelUsage | null };
 
@@ -150,25 +154,57 @@ ${GROUND_RULES}`,
   };
 }
 
-export function synthesisRequest(context: StepContext) {
+const doubtText = (context: StepContext) => (context.critique && context.critique.target !== "none" ? context.critique.note : "(none)");
+const recheckText = (context: StepContext) =>
+  context.recheck ? `the finding was re-checked and ${context.recheck.verdict === "kept" ? "stands" : "was revised (the findings above show the revision)"}` : "(none)";
+const pathsText = (context: StepContext) =>
+  context.paths ? context.paths.paths.map((path) => `- ${path.label} (rated ${path.assessment.toFixed(2)}): ${path.why} Main risk: ${path.risk}`).join("\n") : "(none)";
+const basisSchema = (context: StepContext, maxItems: number) => {
   const keys = [...context.findings.keys()].map(findingKey);
-  const doubt = context.critique && context.critique.target !== "none" ? context.critique.note : "(none)";
-  const recheck = context.recheck ? `the finding was re-checked and ${context.recheck.verdict === "kept" ? "stands" : "was revised (the findings above show the revision)"}` : "(none)";
+  return { type: "array", maxItems, items: { type: "string", enum: keys.length ? keys : ["none"] } };
+};
+
+export function pathsRequest(context: StepContext) {
+  return {
+    schemaName: "morph_paths",
+    system: `You are Lume, the synthesizer on MORPH's team. Lay out 2 or 3 genuinely different paths the person could take, such as going ahead, a smaller or partnered version, or waiting.
+- label: at most 4 plain words.
+- assessment: your rough rating from 0 to 1 of how well the path fits the findings and the person's own answers. It is a judgment, not a probability; the ratings don't need to add up to 1. Rate the paths differently when the findings favor one.
+- why: one sentence under 20 words: what makes the path work.
+- risk: its main risk, under 15 words.
+- basis: the keys of the findings the path rests on.
+${GROUND_RULES}`,
+    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nThe person's own answers:\n${repliesText(context)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubtText(context)}\nRe-check: ${recheckText(context)}`,
+    jsonSchema: strictObject({
+      paths: {
+        type: "array",
+        minItems: 2,
+        maxItems: 3,
+        items: strictObject({ label: str(32), assessment: { type: "number" }, why: str(140), risk: str(120), basis: basisSchema(context, 4) }),
+      },
+    }),
+  };
+}
+
+export function synthesisRequest(context: StepContext) {
+  const doubt = doubtText(context);
+  const recheck = recheckText(context);
   return {
     schemaName: "morph_synthesis",
     system: `You are Lume and Nova, agreeing on MORPH's tentative answer from the team's findings.
 - statement: the answer, at most 8 plain words.
 - reason: at most 2 short sentences, under 50 words, that rest on the findings and mention Vex's doubt if there is one.
 - Fit the answer to the person's own answers. If they chose not to answer a question, say briefly that the answer doesn't account for it.
+- If Lume weighed paths, the answer normally takes the highest-rated one; if it doesn't, the reason says why.
 - confidence: low, or moderate if the findings agree. The findings are general knowledge, not research.
 - basis: the keys of the findings the answer rests on.
 ${GROUND_RULES}`,
-    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nThe person's own answers:\n${repliesText(context)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubt}\nRe-check: ${recheck}`,
+    prompt: `${quote("Question", context.objective)}\n\nWhat has to be decided: ${context.plan.interpretation}\n\nThe person's own answers:\n${repliesText(context)}\n\nFindings:\n${findingsText(context)}\n\nSage's combined view: ${combinedText(context)}\n\nVex's doubt: ${doubt}\nRe-check: ${recheck}\n\nPaths Lume weighed:\n${pathsText(context)}`,
     jsonSchema: strictObject({
       statement: str(90),
       reason: str(320),
       confidence: { type: "string", enum: ["low", "moderate"] },
-      basis: { type: "array", maxItems: 6, items: { type: "string", enum: keys.length ? keys : ["none"] } },
+      basis: basisSchema(context, 6),
     }),
   };
 }
@@ -184,7 +220,9 @@ export async function runAgentStep(provider: AiProvider, context: StepContext, s
           ? critiqueRequest(context)
           : step.kind === "recheck"
             ? recheckRequest(context)
-            : synthesisRequest(context);
+            : step.kind === "paths"
+              ? pathsRequest(context)
+              : synthesisRequest(context);
   if (!request) return { ok: false, reason: "that task isn't in the plan", usage: null };
   const reply = await provider.generateStructured({ ...request, maxOutputTokens: MAX_OUTPUT_TOKENS, ...(signal ? { signal } : {}) });
   if (!reply.ok) return reply;
@@ -206,6 +244,14 @@ export async function runAgentStep(provider: AiProvider, context: StepContext, s
       const parsed = CritiqueResultSchema.safeParse(reply.value);
       const known = parsed.success && critiqueTargets(context).includes(parsed.data.target);
       return parsed.success && known ? { ok: true, kind: "critique", result: parsed.data, usage: reply.usage } : invalid;
+    }
+    case "paths": {
+      const parsed = PathsResultSchema.safeParse(reply.value);
+      if (!parsed.success) return invalid;
+      const labels = new Set(parsed.data.paths.map((path) => path.label.toLowerCase()));
+      if (labels.size !== parsed.data.paths.length) return invalid;
+      const paths = parsed.data.paths.map((path) => ({ ...path, basis: path.basis.filter((key) => context.findings.has(Number(key.slice(1)) - 1)) }));
+      return { ok: true, kind: "paths", result: { paths }, usage: reply.usage };
     }
     case "synthesis": {
       const parsed = SynthesisResultSchema.safeParse(reply.value);

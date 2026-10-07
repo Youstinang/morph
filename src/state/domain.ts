@@ -125,6 +125,10 @@ export const ScenarioSchema = z.object({
   id: Id,
   label: z.string().min(1).max(60),
   assessment: z.number().min(0).max(1),
+  /** Why the path could work, its main risk, and the findings it rests on. */
+  why: z.string().min(1).max(200).nullable().default(null),
+  risk: z.string().min(1).max(160).nullable().default(null),
+  evidenceIds: z.array(Id).max(6).default([]),
   updatedAt: Time,
 });
 export type Scenario = z.infer<typeof ScenarioSchema>;

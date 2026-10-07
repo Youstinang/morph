@@ -6,7 +6,7 @@ import { LOOP_RESTART_DELAY } from "@/orchestration/run-controller";
 import { MODULE_CATALOG } from "@/visualization/world/sim/presentation";
 import { AGENT_ORDER, homePosition } from "@/visualization/world/sim/roster";
 import type { AgentId, AgentState } from "@/visualization/world/sim/types";
-import { coreState, scenarioWeights } from "@/visualization/world/sim/world";
+import { coreState, leadingScenario, scenarioViews } from "@/visualization/world/sim/world";
 import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
@@ -180,12 +180,17 @@ describe("deterministic demo run", () => {
   it("reports core states and scenario weights from events", () => {
     const session = createLabSession();
     expect(coreState(session.world)).toBe("dormant");
-    expect(scenarioWeights(session.world)).toBeNull();
+    expect(scenarioViews(session.world)).toBeNull();
     runUntil(session, (s) => signal(s, "recommendation") !== undefined);
     expect(coreState(session.world)).toBe("completed");
-    const weights = scenarioWeights(session.world)!;
-    expect(weights.partnership).toBeGreaterThan(weights.direct);
-    expect(weights.partnership).toBeGreaterThan(weights.delay);
+    const paths = scenarioViews(session.world)!;
+    expect(paths.map((path) => path.label)).toEqual(["Go in alone", "Partner locally", "Wait for now"]);
+    expect(leadingScenario(session.world)).toBe("partnership");
+    expect(session.world.story.scenarioShiftAt).not.toBeNull();
+    for (const path of paths) {
+      expect(path.risk).toBeTruthy();
+      expect(path.evidence).toBeGreaterThan(0);
+    }
   });
 
   it("restarts the loop after the recommendation settles", () => {

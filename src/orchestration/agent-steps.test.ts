@@ -28,7 +28,7 @@ const context = (findings: [number, typeof finding][] = []): StepContext => ({
   combined: null,
   critique: null,
   recheck: null,
-  replies: new Map(),
+  paths: null, replies: new Map(),
 });
 
 describe("agent steps", () => {

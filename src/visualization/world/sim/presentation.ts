@@ -1,7 +1,5 @@
-import { DEMO_MODULES, SCENARIO_LABELS, type DemoModuleId } from "@/state/fixtures/uae-market";
+import { DEMO_MODULES, type DemoModuleId } from "@/state/fixtures/uae-market";
 import type { ModuleSpec } from "./types";
-
-export { SCENARIO_LABELS };
 
 /** How each demo module looks: the workstation that matches its kind of work, its surface and its color. */
 const PRESENTATION: Record<DemoModuleId, Pick<ModuleSpec, "station" | "surface" | "color">> = {

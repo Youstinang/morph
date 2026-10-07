@@ -10,6 +10,7 @@ import {
   doubtedTask,
   type CombineResult,
   type CritiqueResult,
+  type PathsResult,
   type RecheckResult,
   type ResearchResult,
   type StepResponse,
@@ -28,8 +29,8 @@ export type { AnswerRequester } from "./live-inputs";
  * and plans while the real planner call is in flight; the accepted plan opens its stations and sends the
  * agents to them. Then the team works (user choices 2026-10-07): each agent with a task researches from the
  * model's general knowledge, hands the finding to Sage at the Core, who combines them and briefs Vex; Vex
- * challenges the weakest point and may send one finding back for a re-check; Lume and Nova agree on a
- * tentative answer. Every result is unverified model evidence. Without a server run id, the team waits at
+ * challenges the weakest point and may send one finding back for a re-check; a "Possible paths" station opens
+ * where Lume weighs 2–3 paths; Lume and Nova agree on a tentative answer. Every result is unverified model evidence. Without a server run id, the team waits at
  * its stations instead.
  *
  * Replies arrive asynchronously but are acted on inside `step`, so everything happens on the run clock.
@@ -65,7 +66,7 @@ export interface LiveQuestion {
   dispose(): void;
 }
 
-type StepValue = ResearchResult | CombineResult | CritiqueResult | RecheckResult | SynthesisResult;
+type StepValue = ResearchResult | CombineResult | CritiqueResult | RecheckResult | PathsResult | SynthesisResult;
 
 const isSettled = (status: string | undefined) => status === "succeeded" || status === "failed" || status === "skipped";
 const planner: Provenance = { kind: "model", label: "Planner", agentId: PLANNER_AGENT };
@@ -212,6 +213,10 @@ export function createLiveQuestion(
             : SYNTHESIZER;
   /** The finding Vex sent back for a re-check, once he has. */
   let recheckTask: number | null = null;
+  /** The Possible paths station: not opened yet, opened for Lume, or skipped because there's no review to weigh. */
+  let paths: "pending" | "open" | "skipped" = "pending";
+  const pathsModule = id("paths");
+  const pathsDone = () => paths === "skipped" || (paths === "open" && isSettled(scheduler!.status("paths")));
 
   /**
    * The team's work after planning, as scheduled tasks: research; Sage combines what was handed to her;
@@ -242,7 +247,7 @@ export function createLiveQuestion(
       id: "synthesis",
       dependsOn: research,
       needs: "any",
-      ready: () => at.get(SYNTHESIZER) === "core" && isSettled(work.status("critique")) && (recheckTask === null || isSettled(work.status("recheck"))),
+      ready: () => at.get(SYNTHESIZER) === "core" && isSettled(work.status("critique")) && (recheckTask === null || isSettled(work.status("recheck"))) && pathsDone(),
       run: ask({ kind: "synthesis" }),
     });
     scheduler = work;
@@ -262,18 +267,47 @@ export function createLiveQuestion(
     });
   }
 
+  /** Vex has reviewed and any re-check is in: a station rises for the paths, and Lume walks there to weigh them. */
+  function openPaths() {
+    const work = scheduler!;
+    if (work.status("critique") !== "succeeded") {
+      paths = "skipped";
+      return;
+    }
+    publish({ type: "workspace_morph_started", reason: "The team's work is reviewed, so the possible paths can be weighed." });
+    const opened = propose(
+      {
+        operation: "add_module",
+        module: { id: pathsModule, title: "Possible paths", kind: "possibility", group: "decision" },
+        why: { reason: "Vex has reviewed the findings, so Lume can weigh the possible paths.", agentId: SYNTHESIZER },
+      },
+      "paths-station",
+      { kind: "orchestrator" },
+      "A station rises for the possible paths.",
+    );
+    publish({ type: "workspace_morph_completed" });
+    if (!opened) {
+      paths = "skipped";
+      return;
+    }
+    paths = "open";
+    work.add({ id: "paths", ready: () => at.get(SYNTHESIZER) === pathsModule, run: ask({ kind: "paths" }) });
+    send(SYNTHESIZER, { kind: "module", moduleId: pathsModule }, "going to weigh the possible paths");
+  }
+
   function onWork(event: SchedulerEvent<StepValue>) {
     if (!plan) return;
     const [kind, index] = event.id.split("-") as [AgentStep["kind"], string | undefined];
     const task = kind === "research" ? Number(index) : kind === "recheck" ? (recheckTask ?? -1) : -1;
     const assignment = task >= 0 ? plan.tasks[task] : undefined;
     const agentId = kind === "research" ? (assignment?.agent ?? PLANNER_AGENT) : agentFor({ kind } as AgentStep);
-    const moduleId = task >= 0 ? moduleOf(task) : null;
+    const moduleId = task >= 0 ? moduleOf(task) : kind === "paths" ? pathsModule : null;
     const WHAT: Record<AgentStep["kind"], string> = {
       research: assignment?.task ?? "the task",
       combine: "putting the findings together",
       critique: "reviewing the findings",
       recheck: "double-checking the finding",
+      paths: "weighing the possible paths",
       synthesis: "writing the answer",
     };
 
@@ -287,6 +321,12 @@ export function createLiveQuestion(
         publish({ type: "agent_work_started", agentId, activity: "evaluating", task: "looking for the weakest point", moduleId: null });
       } else if (kind === "recheck") {
         publish({ type: "retry_started", agentId, task: "double-checking the finding Vex doubted", moduleId });
+      } else if (kind === "paths") {
+        publish(
+          event.attempt > 1
+            ? { type: "retry_started", agentId: SYNTHESIZER, task: "weighing the possible paths", moduleId: pathsModule }
+            : { type: "agent_work_started", agentId: SYNTHESIZER, activity: "evaluating", task: "weighing the possible paths", moduleId: pathsModule },
+        );
       } else {
         publish({ type: "agent_collaboration_started", agentIds: [SYNTHESIZER, PLANNER_AGENT], moduleId: null });
         publish({ type: "synthesis_started", agentIds: [SYNTHESIZER, PLANNER_AGENT], summary: "Lume and Nova are putting a tentative answer together." });
@@ -379,6 +419,25 @@ export function createLiveQuestion(
       if (current) propose({ operation: "remove_evidence", evidenceId: id("doubt"), supersededBy: current, why: why(current) }, "doubt-answered", as);
       const stands = result.verdict === "kept";
       publish({ type: "task_completed", agentId, task: stands ? "the finding stands" : "revised the finding", moduleId, ...(stands ? { summary: `${nameOf(agentId)} re-checked: the finding stands.` } : {}) });
+    } else if (kind === "paths") {
+      const result = event.value as PathsResult;
+      const as = asModel(SYNTHESIZER, "Synthesizer");
+      const strongest = [...result.paths].sort((a, b) => b.assessment - a.assessment)[0]!;
+      result.paths.forEach((path, i) => {
+        const evidenceIds = path.basis.flatMap((key) => evidenceFor.get(Number(key.slice(1)) - 1) ?? []);
+        propose(
+          { operation: "add_scenario", scenario: { id: id(`path${i + 1}`), label: path.label, assessment: path.assessment, why: path.why, risk: path.risk, evidenceIds } },
+          `path-${i}`,
+          as,
+          i === 0 ? `Lume weighed ${result.paths.length} paths; "${strongest.label}" fits best for now.`.slice(0, 240) : undefined,
+        );
+      });
+      propose(
+        { operation: "update_module", moduleId: pathsModule, changes: { summary: { headline: `Best fit: ${strongest.label}`.slice(0, 60), detail: "Lume's rough weighing, not a prediction" } } },
+        "paths-summary",
+        as,
+      );
+      publish({ type: "task_completed", agentId: SYNTHESIZER, task: "weighed the possible paths", moduleId: pathsModule });
     } else {
       const result = event.value as SynthesisResult;
       const evidenceIds = [...result.basis.flatMap((key) => evidenceFor.get(Number(key.slice(1)) - 1) ?? []), ...desk.evidenceIds];
@@ -424,7 +483,8 @@ export function createLiveQuestion(
       }
     }
     const recheckDone = recheckTask === null || isSettled(work.status("recheck"));
-    if (isSettled(work.status("critique")) && recheckDone && !synthesizerSent && work.status("synthesis") === "pending") {
+    if (isSettled(work.status("critique")) && recheckDone && paths === "pending") openPaths();
+    if (isSettled(work.status("critique")) && recheckDone && pathsDone() && !synthesizerSent && work.status("synthesis") === "pending") {
       synthesizerSent = true;
       send(SYNTHESIZER, { kind: "core" }, "heading to the center to agree on an answer");
     }
@@ -487,6 +547,9 @@ export function createLiveQuestion(
       if (event.agentId === ANALYST && analystSent && !gathered) return gather();
       if (event.agentId === CRITIC && criticSent) return brief();
       if (event.agentId === SYNTHESIZER && synthesizerSent) return void publish({ type: "agent_waiting", agentId: SYNTHESIZER, task: "waiting for a turn to answer" });
+    }
+    if (event.target.kind === "module" && event.target.moduleId === pathsModule && event.agentId === SYNTHESIZER) {
+      return void publish({ type: "agent_waiting", agentId: SYNTHESIZER, task: "about to weigh the paths" });
     }
     if (event.target.kind === "module" && recheckTask !== null && plan!.tasks[recheckTask]?.agent === event.agentId) {
       return void publish({ type: "agent_waiting", agentId: event.agentId, task: "about to double-check" });

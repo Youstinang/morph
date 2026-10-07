@@ -162,19 +162,26 @@ export function resolveAssumption(ws: Workspace, id: string, status: "confirmed"
   return { ...ws, assumptions: ws.assumptions.map((item) => (item.id === id ? { ...item, status, resolvedBy: evidenceId, resolvedAt: ws.time } : item)) };
 }
 
-export function addScenario(ws: Workspace, scenario: Omit<Scenario, "updatedAt">): Transition {
+type ScenarioDetail = Partial<Pick<Scenario, "why" | "risk" | "evidenceIds">>;
+const unknownEvidence = (ws: Workspace, ids: readonly string[]) => ids.find((id) => !ws.evidence.some((item) => item.id === id && item.status === "accepted"));
+
+export function addScenario(ws: Workspace, scenario: Pick<Scenario, "id" | "label" | "assessment"> & ScenarioDetail): Transition {
   const parsed = ScenarioSchema.safeParse({ ...scenario, updatedAt: ws.time });
   if (!parsed.success) return "the scenario is malformed";
   if (ws.scenarios.some((item) => item.id === scenario.id)) return `scenario ${scenario.id} already exists`;
+  const missing = unknownEvidence(ws, parsed.data.evidenceIds);
+  if (missing) return `evidence ${missing} does not exist`;
   return { ...ws, scenarios: [...ws.scenarios, parsed.data] };
 }
 
-export function updateScenario(ws: Workspace, id: string, change: { assessment: number; label?: string }): Transition {
+export function updateScenario(ws: Workspace, id: string, change: { assessment: number; label?: string } & ScenarioDetail): Transition {
   const target = ws.scenarios.find((item) => item.id === id);
   if (!target) return `scenario ${id} does not exist`;
   const parsed = ScenarioSchema.safeParse({ ...target, ...change, updatedAt: ws.time });
   if (!parsed.success) return "the scenario change is malformed";
-  if (parsed.data.assessment === target.assessment && parsed.data.label === target.label) return "nothing changed";
+  const missing = unknownEvidence(ws, parsed.data.evidenceIds);
+  if (missing) return `evidence ${missing} does not exist`;
+  if (JSON.stringify({ ...parsed.data, updatedAt: 0 }) === JSON.stringify({ ...target, updatedAt: 0 })) return "nothing changed";
   return { ...ws, scenarios: ws.scenarios.map((item) => (item.id === id ? parsed.data : item)) };
 }
 

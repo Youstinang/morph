@@ -34,7 +34,14 @@ export const EventModuleSchema = z.object({
 });
 export type EventModule = z.infer<typeof EventModuleSchema>;
 
-const ScenarioInputSchema = z.object({ id: Id, label: z.string().min(1).max(60), assessment: z.number().min(0).max(1) });
+const ScenarioInputSchema = z.object({
+  id: Id,
+  label: z.string().min(1).max(60),
+  assessment: z.number().min(0).max(1),
+  why: z.string().min(1).max(200).nullable().optional(),
+  risk: z.string().min(1).max(160).nullable().optional(),
+  evidenceIds: z.array(Id).max(6).optional(),
+});
 const event = <T extends string, S extends z.ZodRawShape>(type: T, shape: S) =>
   z.object({ type: z.literal(type), ...shape });
 

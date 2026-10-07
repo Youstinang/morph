@@ -45,6 +45,16 @@ export type CombineResult = z.infer<typeof CombineResultSchema>;
 export const RecheckResultSchema = ResearchResultSchema.extend({ verdict: z.enum(["kept", "revised"]) }).strict();
 export type RecheckResult = z.infer<typeof RecheckResultSchema>;
 
+/**
+ * Lume's weighing of 2–3 different paths. `assessment` is a rough relative rating of fit, a judgment and
+ * never a probability; `basis` names the findings each path rests on.
+ */
+export const PathResultSchema = z
+  .object({ label: Text(32), assessment: z.number().min(0).max(1), why: Text(140), risk: Text(120), basis: z.array(Key).max(4) })
+  .strict();
+export const PathsResultSchema = z.object({ paths: z.array(PathResultSchema).min(2).max(3) }).strict();
+export type PathsResult = z.infer<typeof PathsResultSchema>;
+
 export const RunIdSchema = z.string().regex(/^[\w-]{8,64}$/);
 
 /**
@@ -55,6 +65,7 @@ export const AgentStepSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("combine") }).strict(),
   z.object({ kind: z.literal("critique") }).strict(),
   z.object({ kind: z.literal("recheck") }).strict(),
+  z.object({ kind: z.literal("paths") }).strict(),
   z.object({ kind: z.literal("synthesis") }).strict(),
 ]);
 export type AgentStep = z.infer<typeof AgentStepSchema>;
@@ -68,6 +79,7 @@ export const StepResponseSchema = z.union([
   z.object({ ok: z.literal(true), kind: z.literal("combine"), result: CombineResultSchema, usage: PlanUsageSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("critique"), result: CritiqueResultSchema, usage: PlanUsageSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("recheck"), result: RecheckResultSchema, usage: PlanUsageSchema }),
+  z.object({ ok: z.literal(true), kind: z.literal("paths"), result: PathsResultSchema, usage: PlanUsageSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("synthesis"), result: SynthesisResultSchema, usage: PlanUsageSchema }),
   z.object({ ok: z.literal(false), reason: Text(200), stop: z.boolean().optional(), usage: PlanUsageSchema.optional() }),
 ]);

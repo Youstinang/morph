@@ -9,29 +9,22 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   SRGBColorSpace,
-  SpriteMaterial,
-  Vector3,
   type Group,
   type Mesh,
 } from "three";
 import { useReducedMotion } from "../motion";
 import { MATERIALIZE_SECONDS, moduleGrowth, modulePose, moduleScale } from "../sim/modules";
-import { SCENARIO_LABELS } from "../sim/presentation";
-import type { ModuleEmphasis, ModuleHeadline, ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
-import { moduleHeadline, scenarioWeights } from "../sim/world";
+import type { ModuleEmphasis, ModuleHeadline, ModuleId, ModuleSpec, Vec2, World } from "../sim/types";
+import { moduleHeadline } from "../sim/world";
 import { geo } from "./geometry";
-import { Bay, CoreTrack, ServiceArm, isPresent } from "./module-fixtures";
+import { Bay, CoreTrack, ServiceArm } from "./module-fixtures";
+import { ScenarioBranches } from "./scenario-branches";
 import { BAY_OFFSET, type StationMaterials } from "./station-layout";
 import { preloadStationModels, STATION_SHAPES, ZoneStation } from "./zone-station";
 
 preloadStationModels();
 
 const MAX_SHARDS = 8;
-const SCENARIOS: { key: keyof ScenarioWeights; angle: number }[] = [
-  { key: "direct", angle: -0.75 },
-  { key: "partnership", angle: 0 },
-  { key: "delay", angle: 0.75 },
-];
 
 const PANEL_W = 1024;
 const PANEL_H = 600;
@@ -88,38 +81,6 @@ function drawPanel(canvas: HTMLCanvasElement, title: string, color: string, find
     .forEach((line, index) => ctx.fillText(line, 60, 250 + lines.length * 96 + 30 + index * 58));
 }
 
-function BranchLabel({ text, index }: { text: string; index: number }) {
-  const material = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 96;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "rgba(14,10,24,0.72)";
-    ctx.beginPath();
-    ctx.roundRect(4, 4, 504, 88, 18);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(185,140,255,0.55)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = "#ece4ff";
-    ctx.font = "500 44px ui-sans-serif, system-ui, -apple-system, Helvetica, Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 256, 50);
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace;
-    return new SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false });
-  }, [text]);
-  useEffect(
-    () => () => {
-      material.map?.dispose();
-      material.dispose();
-    },
-    [material],
-  );
-  return <sprite material={material} scale={[1.9, 0.36, 1]} position={[0, 1, 0]} renderOrder={10 + index} />;
-}
-
 interface ModuleEntry {
   key: string;
   id: ModuleId;
@@ -155,7 +116,6 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
   const column = useRef<Mesh>(null);
   const panel = useRef<Group>(null);
   const shards = useRef<Group>(null);
-  const branches = useRef<Group>(null);
   const distance = useRef(Math.hypot(start[0], start[1]));
   const state = useRef({
     x: start[0],
@@ -167,7 +127,6 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
     emphasis: "normal" as ModuleEmphasis,
     pulseAt: -Infinity,
   });
-  const viewer = useRef(new Vector3());
 
   const resources = useMemo(() => {
     const canvas = document.createElement("canvas");
@@ -298,30 +257,6 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
         child.rotation.x += dt * 1.2 * drift;
       });
     }
-
-    if (branches.current) {
-      const weights = isPresent(mod) && !mod.collapsed ? scenarioWeights(world) : null;
-      branches.current.visible = weights !== null;
-      if (weights && branches.current.parent) {
-        const eye = branches.current.parent.worldToLocal(viewer.current.copy(frame.camera.position));
-        branches.current.rotation.y = Math.atan2(eye.x, eye.z);
-        branches.current.children.forEach((branch, i) => {
-          const scenario = SCENARIOS[i];
-          const [stem, node] = branch.children as Mesh[];
-          if (!scenario || !stem || !node) return;
-          const current: number = branch.userData.weight ?? 0;
-          const next = MathUtils.damp(current, weights[scenario.key], 2.5, dt);
-          branch.userData.weight = next;
-          const length = 0.8 + next * 3.2;
-          stem.scale.set(0.6 + next * 1.6, length, 0.6 + next * 1.6);
-          stem.position.y = length / 2;
-          node.position.y = length;
-          node.scale.setScalar(0.6 + next * 2.2);
-          const label = branch.children[2];
-          if (label) label.position.y = length + 0.45;
-        });
-      }
-    }
   });
 
   return (
@@ -359,17 +294,7 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
             );
           })}
         </group>
-        {spec.surface === "scenarios" && (
-          <group ref={branches} position={[0, 0.15, 0.2]} visible={false}>
-            {SCENARIOS.map((scenario, i) => (
-              <group key={scenario.key} rotation={[0, 0, scenario.angle]}>
-                <mesh geometry={geo.cylinder(0.025, 0.04, 1, 10)} material={resources.edge} />
-                <mesh geometry={geo.ico(0.1, 1)} material={resources.edge} />
-                <BranchLabel text={SCENARIO_LABELS[scenario.key]} index={i} />
-              </group>
-            ))}
-          </group>
-        )}
+        {spec.surface === "scenarios" && <ScenarioBranches id={id} worldRef={worldRef} />}
       </group>
     </group>
   );

@@ -214,7 +214,7 @@ export function LabHud(props: LabHudProps) {
             </div>
             {scenarios.length > 0 && (
               <div className="lab-options">
-                <p className="lab-options__title">How the options compare</p>
+                <p className="lab-options__title">{live ? "Possible paths" : "How the options compare"}</p>
                 {scenarios.map((scenario) => (
                   <div key={scenario.id} className="lab-scenario">
                     <span>{scenario.label}</span>
@@ -223,7 +223,7 @@ export function LabHud(props: LabHudProps) {
                     </span>
                   </div>
                 ))}
-                <p className="caption">The team&apos;s judgment, not a probability.</p>
+                <p className="caption">{live ? "Lume's rough weighing, not a probability." : "The team's judgment, not a probability."}</p>
               </div>
             )}
           </section>

@@ -21,6 +21,19 @@ const reply = (step: AgentStep): StepResponse => {
   if (step.kind === "recheck") {
     return { ok: true, kind: "recheck", usage, result: { verdict: "revised", finding: "Finding 1, revised after a second look.", headline: "Revised", detail: "Second look", kind: "risk" } };
   }
+  if (step.kind === "paths") {
+    return {
+      ok: true,
+      kind: "paths",
+      usage,
+      result: {
+        paths: [
+          { label: "Try one app", assessment: 0.62, why: "Demand is there and the kitchen has room.", risk: "Fees may eat the margin.", basis: ["f1", "f2"] },
+          { label: "Wait a season", assessment: 0.3, why: "Keeps things simple while demand settles.", risk: "Rivals win the app customers.", basis: ["f3"] },
+        ],
+      },
+    };
+  }
   return { ok: true, kind: "synthesis", usage, result: { statement: "Try one app for a month", reason: "Demand looks real, but the listing needs checking.", confidence: "low", basis: ["f1", "f2"] } };
 };
 
@@ -110,7 +123,7 @@ describe("live question: the team works", () => {
     });
 
     expect(session.run.live?.phase).toBe("answered");
-    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine", "critique", "synthesis"]);
+    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine", "critique", "paths", "synthesis"]);
     expect(server.maxInFlight()).toBeLessThanOrEqual(LIVE_LIMITS.concurrency);
     expect(maxWorking).toBeGreaterThanOrEqual(2);
     expect(maxWorking).toBeLessThanOrEqual(LIVE_LIMITS.concurrency);
@@ -130,7 +143,13 @@ describe("live question: the team works", () => {
     expect(record.recommendation!.evidenceIds).toEqual([byTask(1), byTask(2), yours.id]);
     expect(server.answers).toEqual([{ runId: "run-test-0001", question: 0, reply: { kind: "answer", value: 40 } }]);
     expect(record.objective?.status).toBe("answered");
-    expect(record.cost.modelCalls).toBe(7);
+    expect(record.cost.modelCalls).toBe(8);
+    const station = Object.values(record.modules).find((item) => item.kind === "possibility")!;
+    expect(station).toMatchObject({ title: "Possible paths", group: "decision", summary: { headline: "Best fit: Try one app", detail: "Lume's rough weighing, not a prediction" } });
+    expect(record.scenarios.map((path) => [path.label, path.assessment])).toEqual([["Try one app", 0.62], ["Wait a season", 0.3]]);
+    expect(record.scenarios[0]).toMatchObject({ why: "Demand is there and the kitchen has room.", risk: "Fees may eat the margin.", evidenceIds: [byTask(1), byTask(2)] });
+    expect(record.scenarios[1]!.evidenceIds).toEqual([byTask(3)]);
+    expect(session.world.story.scenarios.map((path) => path.label)).toEqual(["Try one app", "Wait a season"]);
     for (const agent of Object.values(record.agents)) expect(agent.state).toBe("idle");
     expect(coreState(session.world)).toBe("completed");
 
@@ -141,6 +160,12 @@ describe("live question: the team works", () => {
     const order = events.map((e) => e.type);
     expect(order.indexOf("synthesis_started")).toBeGreaterThan(order.lastIndexOf("evidence_discovered"));
     expect(order.indexOf("assumption_challenged")).toBeLessThan(order.indexOf("synthesis_started"));
+    expect(order.indexOf("assumption_challenged")).toBeLessThan(order.indexOf("scenario_created"));
+    expect(order.indexOf("scenario_created")).toBeLessThan(order.indexOf("synthesis_started"));
+    expect(events.find((e) => e.type === "scenario_created")).toMatchObject({ summary: 'Lume weighed 2 paths; "Try one app" fits best for now.', operation: { source: { kind: "model", agentId: "lume" } } });
+    const lumeToPaths = events.find((e) => e.type === "agent_assigned" && e.agentId === "lume" && e.target.kind === "module");
+    expect(lumeToPaths).toMatchObject({ target: { moduleId: station.id }, task: "going to weigh the possible paths" });
+    expect(events.find((e) => e.type === "agent_work_started" && e.agentId === "lume" && e.moduleId === station.id)).toMatchObject({ activity: "evaluating" });
     expect(events.find((e) => e.type === "recommendation_updated")?.summary).toBe("Tentative answer: Try one app for a month");
 
     const handoffs = events.flatMap((e) => (e.type === "artifact_handoff_started" ? [`${e.from}>${e.to}:${e.kind}`] : []));
@@ -164,7 +189,7 @@ describe("live question: the team works", () => {
       if (orion.at(-1) !== state) orion.push(state);
     });
     expect(session.run.live?.phase).toBe("answered");
-    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine", "critique", "recheck", "synthesis"]);
+    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine", "critique", "recheck", "paths", "synthesis"]);
 
     const events = cycleEvents(session);
     expect(events.find((e) => e.type === "retry_requested")).toMatchObject({ by: "vex", agentId: "orion" });
@@ -207,7 +232,18 @@ describe("live question: the team works", () => {
     const { session } = setup(server);
     await play(session, server, 120, (s) => s.run.live?.phase === "answered");
     expect(session.run.live?.phase).toBe("answered");
-    expect(server.calls.map((step) => step.kind).slice(-2)).toEqual(["critique", "synthesis"]);
+    expect(server.calls.map((step) => step.kind).slice(-3)).toEqual(["critique", "paths", "synthesis"]);
+  });
+
+  it("still answers when weighing the paths fails, without making any up", async () => {
+    const server = fakeServer(1, (step) => (step.kind === "paths" ? { ok: false, reason: "the AI's reply didn't pass MORPH's checks", usage } : null));
+    const { session } = setup(server);
+    await play(session, server, 150, (s) => s.run.live?.phase === "answered");
+    expect(session.run.live?.phase).toBe("answered");
+    expect(server.calls.filter((step) => step.kind === "paths")).toHaveLength(LIVE_LIMITS.retries + 1);
+    expect(server.calls.at(-1)?.kind).toBe("synthesis");
+    expect(ws(session).scenarios).toEqual([]);
+    expect(ws(session).recommendation?.status).toBe("final");
   });
 
   it("stops honestly when the question reaches its limit, and sends the team home", async () => {
@@ -254,7 +290,7 @@ describe("live question: the team works", () => {
 
     await play(session, server, 120, (s) => s.run.live?.phase === "answered");
     expect(session.run.live?.phase).toBe("answered");
-    expect(server.calls.map((step) => step.kind).slice(-2)).toEqual(["critique", "synthesis"]);
+    expect(server.calls.map((step) => step.kind).slice(-3)).toEqual(["critique", "paths", "synthesis"]);
     expect(server.answers.map((item) => item.reply)).toEqual([{ kind: "answer", value: 25 }]);
     const answered = cycleEvents(session).find((e) => e.type === "human_input_received");
     expect(answered).toMatchObject({ source: "user", answeredBy: "user", answer: "25 orders" });

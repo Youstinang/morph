@@ -1,5 +1,5 @@
 import type { StepContext } from "@/orchestration/agent-steps";
-import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type QuestionReply, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
+import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type PathsResult, type QuestionReply, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
 import type { Plan, PlanUsage } from "@/state/plan";
 
 /**
@@ -19,6 +19,7 @@ export interface RunRecord extends StepContext {
   combined: CombineResult | null;
   critique: CritiqueResult | null;
   recheck: RecheckResult | null;
+  paths: PathsResult | null;
   answer: SynthesisResult | null;
   replies: Map<number, QuestionReply>;
 }
@@ -73,6 +74,7 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
         combined: null,
         critique: null,
         recheck: null,
+        paths: null,
         answer: null,
         replies: new Map(),
       });
@@ -94,8 +96,9 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
         return null;
       }
       if (run.findings.size === 0) return { reason: "there are no findings to work from yet", stop: false };
-      const done = { combine: run.combined, critique: run.critique, recheck: run.recheck, synthesis: run.answer }[step.kind];
+      const done = { combine: run.combined, critique: run.critique, recheck: run.recheck, paths: run.paths, synthesis: run.answer }[step.kind];
       if (done) return { reason: "that step is already done", stop: false };
+      if (step.kind === "paths" && !run.critique) return { reason: "Vex hasn't reviewed the work yet", stop: false };
       if (step.kind === "recheck") {
         const task = doubtedTask(run.critique);
         if (task === null || !run.findings.has(task)) return { reason: "Vex hasn't doubted a finding", stop: false };
