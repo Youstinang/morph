@@ -1,5 +1,6 @@
 import { agentChange } from "@/events/agents";
 import type { AgentTarget, EventDraft, WorkspaceEvent } from "@/events/schema";
+import { createCameraDirection, directCamera } from "./camera-director";
 import { createModule, moduleSpot, removeModule, applyModuleChange, stepModules } from "./modules";
 import { AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./roster";
 import { presentationFor } from "./presentation";
@@ -52,7 +53,7 @@ export function createWorld(cycle = 0): World {
       facingAgent: null,
     };
   }
-  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], catches: [], failedCards: [], answerCards: [], story: emptyStory(), morph: null };
+  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], catches: [], failedCards: [], answerCards: [], story: emptyStory(), morph: null, camera: createCameraDirection() };
 }
 
 const isAgent = (world: World, id: string): id is AgentId => id in world.agents;
@@ -94,6 +95,11 @@ export function planRoute(from: Vec2, to: Vec2): [number, number][] {
  * accepted the operation behind them.
  */
 export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldReport): void {
+  reactToStory(world, event, report);
+  directCamera(world, event);
+}
+
+function reactToStory(world: World, event: WorkspaceEvent, report: WorldReport): void {
   const change = agentChange(event);
   if (change && isAgent(world, change.agentId)) {
     const agent = world.agents[change.agentId];

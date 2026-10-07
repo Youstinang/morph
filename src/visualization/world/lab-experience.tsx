@@ -29,6 +29,7 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
   const [speedIndex, setSpeedIndex] = useState(0);
   const [labels, setLabels] = useState(true);
   const [quality, setQuality] = useState<"high" | "balanced">("high");
+  const [autoCamera, setAutoCamera] = useState(true);
   const [selected, setSelected] = useState<AgentId | null>(null);
   const reducedMotion = usePrefersReducedMotion();
 
@@ -70,6 +71,7 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
               quality={quality}
               tags={tags}
               inputAnchor={inputAnchor}
+              directed={autoCamera && !reducedMotion}
             />
           </div>
           <AgentTags registry={tags} selected={selected} />
@@ -79,6 +81,8 @@ export function LabExperience({ createSession }: { createSession: () => LabSessi
             speed={SPEEDS[speedIndex] ?? 1}
             labels={labels}
             quality={quality}
+            autoCamera={autoCamera && !reducedMotion}
+            onToggleCamera={reducedMotion ? null : () => setAutoCamera((value) => !value)}
             selected={selected}
             onTogglePause={() => setPaused((value) => !value)}
             onRestart={restart}

@@ -6,6 +6,7 @@ import { LOOP_RESTART_DELAY } from "@/orchestration/run-controller";
 import { MODULE_CATALOG } from "@/visualization/world/sim/presentation";
 import { AGENT_ORDER, homePosition } from "@/visualization/world/sim/roster";
 import type { AgentId, AgentState } from "@/visualization/world/sim/types";
+import { shotFocus } from "@/visualization/world/sim/camera-director";
 import { coreState, leadingScenario, scenarioViews } from "@/visualization/world/sim/world";
 import { createLabSession, type LabRun } from "./lab-session";
 
@@ -191,6 +192,28 @@ describe("deterministic demo run", () => {
       expect(path.risk).toBeTruthy();
       expect(path.evidence).toBeGreaterThan(0);
     }
+  });
+
+  it("moves the camera only for the story's big moments, in story order", () => {
+    const session = createLabSession();
+    let framesWithShot = 0;
+    let frames = 0;
+    let shotDuringQuestion = false;
+    let lastShots = 0;
+    runUntil(session, (s) => {
+      frames += 1;
+      if (shotFocus(s.world)) framesWithShot += 1;
+      const shots = s.world.camera.history.length;
+      if (shots > lastShots && s.world.story.openInputs.length > 0) shotDuringQuestion = true;
+      lastShots = shots;
+      return ended(s);
+    });
+    const kinds = session.world.camera.history.map((shot) => shot.kind);
+    expect(kinds).toEqual(["focus_core", "delegation", "follow_agent", "pull_back_for_morph", "reveal_handoff", "reveal_scenarios", "focus_recommendation"]);
+    expect(shotDuringQuestion).toBe(false);
+    expect(framesWithShot / frames).toBeLessThan(0.6);
+    expect(session.world.camera.shot?.kind).toBe("focus_recommendation");
+    expect(shotFocus(session.world)?.point).toEqual([0, 0]);
   });
 
   it("restarts the loop after the recommendation settles", () => {

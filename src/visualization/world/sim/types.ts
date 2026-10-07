@@ -3,6 +3,7 @@ export type Vec2 = readonly [x: number, z: number];
 export { AGENT_STATES, type AgentState } from "@/state/domain";
 import type { AgentTarget, Travel } from "@/events/schema";
 import type { AgentState } from "@/state/domain";
+import type { CameraDirection } from "./camera-director";
 
 export type AgentId = "nova" | "orion" | "sage" | "brix" | "vex" | "lume";
 
@@ -268,4 +269,6 @@ export interface World {
   story: StoryView;
   /** The latest reshuffle, if any. */
   morph: WorldMorph | null;
+  /** What the camera director is showing. */
+  camera: CameraDirection;
 }

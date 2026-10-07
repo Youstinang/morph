@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phase 17 is implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17 and 18 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -32,6 +32,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 15 — Collaboration, handoff, failure and retry visuals (visually approved 2026-10-07).
 - Phase 16 — Human-in-loop controls (visually approved 2026-10-07).
 - Phase 17 — Possibility Engine (implemented; awaiting the end-of-run visual review).
+- Phase 18 — Cinematic camera director (implemented; awaiting the end-of-run visual review).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -180,6 +181,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Live questions: once Vex has reviewed and any re-check is in, a "Possible paths" station rises (proposed by the orchestrator, with its reason), Lume walks to it and weighs 2–3 different paths in one AI call: a short label, a rough 0–1 rating (a judgment, not a probability), why it works, its main risk and the findings behind it. The server refuses the step before Vex's review and runs it once; duplicate or malformed paths are refused. The paths are recorded as Lume's model proposals, the station's panel shows the best fit, and Lume and Nova's answer prompt includes the paths and normally takes the highest-rated one. If weighing fails, the team still answers, with no paths.
   - The 3D Possibility Engine is no longer fixed to the demo's three paths: branches grow from a shared root, one per path, with length and thickness following the rating, beads for the findings behind it, an amber marker for its named risk, and the highest-rated path lit brighter with a halo. When ratings shift, the branches flare briefly while they regrow (calm mode: no spin or flare).
   - No new dependency.
+- 2026-10-07, Phase 18 (camera director, user choice: gentle):
+  - `src/visualization/world/sim/camera-director.ts` picks a shot from real events only: the question arriving (push toward the Core), the plan (a wider view), the first agent setting off for a station (follow it for 3 s), a later reshuffle (pull back), Vex sending work back (frame Vex and the researcher), the paths appearing or shifting (close on the Possibility Engine), a camera focus operation, and the final answer (center on the Core, held). Routine work never moves the camera. A stronger moment cuts in on a weaker one; the same shot is extended rather than restarted; no new shot starts while a question panel is open.
+  - The camera only slides and zooms along its usual viewing angle (no orbiting swings), settling in about a second and a half. Dragging or zooming hands the camera to the user for 8 s after they let go. Picking an agent still gives its portrait view. A "Camera: auto / still" button turns the director off; with reduced motion it is off and the button is hidden.
+  - No new dependency.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -321,6 +326,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 18 camera director pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 168 in 22 files. New test: the demo's shots are exactly the Core push, the hand-out, following the first agent, the reshuffle, Vex's send-back, the paths and the answer, in that order; none starts while the question is open; a shot is active less than 60% of the time; the run ends centered on the answer.
+  - Chrome at 1440×900: each shot checked at 3, 10, 15, 27, 40, 47, 52 and 62 s; the question panel stays put; 60 FPS. A drag at 44 s kept the user's view for 8 s before the camera eased back; the toggle switches to "Camera: still".
+  - Found and fixed: the three path updates in one shift each started a shot (now extended); the paths close-up hid the top label behind the info band (wider and aimed higher).
+  - Previews: `p18-focus-core.png`, `p18-reveal-paths.png`, `p18-answer.png`, `p18-user-drag.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -354,7 +364,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Pause stays in the screen (it stops calling the run clock); speed is passed to the run clock. There is no seek or scrub control.
 - The demo runtime still waits on the world's reports of arrivals and landed handoffs, so walking speed in the world sets story timing; headless runs need a stand-in reporter (as the tests use).
 - The event history is capped at 1000 events per session (about three demo loops).
-- `focus_camera` is recorded in the workspace and announced, but the camera doesn't follow it yet (camera direction is Phase 18).
+- The camera director keeps its usual viewing angle, so a station behind the Core is framed from the front, past the Core.
 - `appliedOperationIds` grows for the life of a run (about 45 per demo run); it resets with the workspace on each loop.
 - Development-only npm audit entries in the eslint-config-next → braces chain remain (production audit clean). ESLint 9 is deprecated upstream but required by Next.js plugin peers.
 - The default shell Node is v12; use `nvm use` (Node 24) before project scripts.
@@ -397,7 +407,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 18 — Cinematic camera director (authorized as part of the single run). The next architecture audit is due after about Phase 18.
+The architecture audit due after Phases 16–18, then Phase 19 is already done, so Phase 20 — Research tools (authorized as part of the single run). The next architecture audit is due after about Phase 18.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

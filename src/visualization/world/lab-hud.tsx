@@ -30,6 +30,9 @@ interface LabHudProps {
   onSpeed: () => void;
   onToggleLabels: () => void;
   onToggleQuality: () => void;
+  autoCamera: boolean;
+  /** Null when the camera can't move on its own (reduced motion). */
+  onToggleCamera: (() => void) | null;
   onSelect: (id: AgentId | null) => void;
   onAnswer: (requestId: string, value: InputValue) => void;
   onSkip: (requestId: string) => void;
@@ -141,6 +144,17 @@ export function LabHud(props: LabHudProps) {
           <button type="button" className="lab-btn" onClick={props.onToggleLabels} aria-pressed={props.labels}>
             Names
           </button>
+          {props.onToggleCamera && (
+            <button
+              type="button"
+              className="lab-btn"
+              onClick={props.onToggleCamera}
+              aria-pressed={props.autoCamera}
+              title={props.autoCamera ? "The camera moves gently for big moments; drag to look around" : "The camera stays where you put it"}
+            >
+              {props.autoCamera ? "Camera: auto" : "Camera: still"}
+            </button>
+          )}
           <button type="button" className="lab-btn" onClick={props.onToggleQuality}>
             {props.quality === "high" ? "High" : "Balanced"}
           </button>

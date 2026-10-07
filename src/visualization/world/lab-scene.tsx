@@ -7,6 +7,7 @@ import { useMemo, useRef, type ComponentRef, type RefObject } from "react";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { hudInsets, type HudInsets } from "./hud-layout";
 import { useReducedMotion } from "./motion";
+import { shotFocus } from "./sim/camera-director";
 import { sectorFramePoints } from "./sim/layout";
 import { AGENT_ORDER, homePosition } from "./sim/roster";
 import type { AgentId, World } from "./sim/types";
@@ -37,6 +38,10 @@ const PORTRAIT_SWING = 0.45;
 /** Near a zone, the front view would sit inside the station model, so frame from the Core side instead. */
 const STATION_CLEARANCE = 3.4;
 const STATION_SWING = 0.9;
+/** After the user moves the camera, the director leaves it alone this long (ms). */
+const HANDS_OFF_MS = 8000;
+/** The director's moves are slow: about a second and a half to settle. */
+const DIRECTED_RATE = 1.1;
 
 interface DriverProps {
   worldRef: RefObject<World>;
@@ -156,8 +161,11 @@ function frameOverview(probe: PerspectiveCamera, width: number, height: number, 
   return framing;
 }
 
-function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selected: AgentId | null }) {
+function CameraFocus({ worldRef, selected, directed }: { worldRef: RefObject<World>; selected: AgentId | null; directed: boolean }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const handsOffUntil = useRef(0);
+  const shotTarget = useRef(new Vector3());
+  const shotPosition = useRef(new Vector3());
   const goal = useRef(new Vector3());
   const offset = useRef(new Vector3());
   const portrait = useRef(new Vector3());
@@ -229,6 +237,17 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
       const k = ease(2.4);
       target.lerp(goal.current, k);
       camera.position.lerp(portrait.current, k);
+    } else if (performance.now() < handsOffUntil.current) {
+      // The user is looking around; leave the camera where they put it.
+    } else if (directed && !reduced) {
+      const shot = shotFocus(world);
+      const k = ease(DIRECTED_RATE);
+      if (shot) shotTarget.current.set(MathUtils.lerp(OVERVIEW_TARGET.x, shot.point[0], 0.9), shot.height, MathUtils.lerp(OVERVIEW_TARGET.z, shot.point[1], 0.9));
+      else shotTarget.current.copy(OVERVIEW_TARGET);
+      target.lerp(shotTarget.current, k);
+      shotPosition.current.copy(target).addScaledVector(OVERVIEW_DIRECTION, framing.distance * (shot ? shot.zoom : 1));
+      camera.position.lerp(shotPosition.current, k);
+      d.settling = false;
     } else {
       const k = ease(2.2);
       target.lerp(OVERVIEW_TARGET, k);
@@ -245,6 +264,8 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
     <OrbitControls
       ref={controls}
       makeDefault
+      onStart={() => (handsOffUntil.current = performance.now() + HANDS_OFF_MS)}
+      onEnd={() => (handsOffUntil.current = performance.now() + HANDS_OFF_MS)}
       enableDamping={!reduced}
       dampingFactor={0.08}
       minDistance={3}
@@ -263,6 +284,8 @@ interface LabSceneProps extends DriverProps {
   tags: RefObject<TagRegistry>;
   /** The question panel, kept beside whoever asked. */
   inputAnchor: RefObject<HTMLElement | null>;
+  /** Whether the camera director may move the camera for big moments. */
+  directed: boolean;
 }
 
 export default function LabScene({
@@ -276,6 +299,7 @@ export default function LabScene({
   quality,
   tags,
   inputAnchor,
+  directed,
 }: LabSceneProps) {
   return (
     <Canvas
@@ -298,7 +322,7 @@ export default function LabScene({
       <HumanInput worldRef={worldRef} />
       <TagProjector worldRef={worldRef} registry={tags} />
       <InputAnchor worldRef={worldRef} anchor={inputAnchor} />
-      <CameraFocus worldRef={worldRef} selected={selected} />
+      <CameraFocus worldRef={worldRef} selected={selected} directed={directed} />
       <EffectComposer multisampling={quality === "high" ? 4 : 0}>
         <Bloom intensity={1.05} luminanceThreshold={0.72} luminanceSmoothing={0.2} mipmapBlur />
         <Vignette offset={0.28} darkness={0.75} />
