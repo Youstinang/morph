@@ -404,18 +404,20 @@ export function createLiveQuestion(
       const summary = `Vex pushes back: ${result.note}`.slice(0, 240);
       const assumption = /^a\d$/.test(result.target) ? assumptionIds[Number(result.target.slice(1)) - 1] : undefined;
       const doubted = doubtedTask(result);
+      const sendBack = !assumption && doubted !== null && evidenceFor.has(doubted) && plan.tasks[doubted] !== undefined;
       if (assumption) propose({ operation: "challenge_assumption", assumptionId: assumption, by: CRITIC, note: result.note }, "challenge", as, summary);
-      else if (doubted !== null && evidenceFor.has(doubted) && plan.tasks[doubted]) {
+      else if (sendBack) {
         propose(
           { operation: "add_evidence", evidence: { id: id("doubt"), statement: result.note, kind: "risk", moduleId: moduleOf(doubted), foundBy: CRITIC, source } },
           "doubt",
           as,
           summary,
         );
-        sendBackForRecheck(doubted);
       }
       const none = result.target === "none";
       publish({ type: "task_completed", agentId: CRITIC, task: none ? "found no serious weak spot" : "noting the doubt", moduleId: null, ...(none ? { summary: "Vex found no serious weak spot." } : {}) });
+      // After his review is marked done: completing a task stops a walk, and Vex may be the one sent back.
+      if (sendBack) sendBackForRecheck(doubted);
       if (recheckTask === null) later(SHOW_DONE, () => send(CRITIC, { kind: "home" }, "heading back"));
     } else if (kind === "recheck") {
       const result = event.value as RecheckResult;

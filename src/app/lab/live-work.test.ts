@@ -252,6 +252,21 @@ describe("live question: the team works", () => {
     expect(events.filter((e) => e.type === "operation_rejected")).toEqual([]);
   });
 
+  it.each([
+    ["his own finding", "f3", "vex"],
+    ["the finding of Sage, who combined the work", "f2", "sage"],
+  ])("finishes when Vex sends back %s", async (_who, target, researcher) => {
+    const server = fakeServer(1, (step) =>
+      step.kind === "critique" ? { ok: true, kind: "critique", usage, result: { target, headline: "Too rosy", note: "This may not hold everywhere." } } : null,
+    );
+    const { session } = setup(server);
+    await play(session, server, 150, (s) => s.run.live?.phase === "answered");
+    expect(session.run.live?.phase).toBe("answered");
+    expect(server.calls.map((step) => step.kind)).toEqual(["research", "research", "research", "combine", "critique", "recheck", "paths", "synthesis"]);
+    const back = cycleEvents(session).find((e) => e.type === "agent_assigned" && e.agentId === researcher && e.travel === "retrying");
+    expect(back).toMatchObject({ target: { kind: "module" } });
+  });
+
   it("shows a failed task and its retry, and keeps going", async () => {
     let failed = false;
     const server = fakeServer(2, (step) => {
