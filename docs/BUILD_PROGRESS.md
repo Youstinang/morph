@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 9 — Workspace domain state (authorized 2026-10-07: "go ahead"); complete
+Phase 10 — Typed event system (authorized 2026-10-07: "continue"); complete
 
 ## Status
-Complete — Phase 9 is validated (it has no visual checkpoint; the screen is intentionally unchanged). The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — Phase 10 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and the world now acts only on events). The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -23,6 +23,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phases 4–7 — Orbital command deck, Intent Core, rigged agent characters, and the six-agent flagship choreography in `/lab`.
 - Phase 8 — Spatial modules with the grouped-neighborhood layout.
 - Phase 9 — Workspace domain state: Zod schemas, a Zustand store, selectors, and the demo fixture; the HUD reads from the store.
+- Phase 10 — Typed event system: `WorkspaceEvent` contract and in-memory bus; the 3D world, the store and the steps list all run on events.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -90,6 +91,17 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - `src/state/fixtures/uae-market.ts`: the demo's objective, agents, modules, text and `UAE_STORY` (facts keyed by story signal). `src/state/story.ts`: `StoryFact` and `applyStoryFact`, the precursor of Phase 11's operations.
   - `src/visualization/world/workspace-sync.ts`: a temporary bridge that mirrors the prototype world into the store at the HUD's rate (time, modules, agents, tasks, story facts, scenarios) and resets it when the story loops. Phase 13's demo runtime replaces it.
   - The HUD now reads objective, agents, findings, scenarios, the budget question and the answer from the store. `FINDINGS`, `currentFindings` and the HUD snapshot's copies of agent and finding data were removed. The 3D scene still reads the world (motion and module visuals), as intended until Phases 10–13.
+- 2026-10-07, Phase 10: the user chose to **make the 3D world react to events now**, over connecting only the text panels or building the bus alone. See `EVENT_MODEL.md`.
+  - `src/events/schema.ts`: about 40 Zod-validated event types covering the specification's catalog plus `run_started`, `module_reserved`, `module_updated`, `sources_checked`, `task_completed`, `task_failed`, `assumption_resolved`, `agent_waiting`, `agent_idle` and `tool_failed`. The envelope has `seq`, `at`, `cycle`, `source` (user, demo, orchestrator or world) and an optional one-line `summary`.
+  - `src/events/bus.ts`: a synchronous in-memory bus. It validates and stamps each event, rejects malformed ones, queues events published by listeners so everyone sees one order, isolates failing listeners, and keeps a bounded history (1000) with counters. No external queue.
+  - `src/events/agents.ts`: one agent-state transition table shared by the store and the world.
+  - The event contract and bus live in `src/events`, not `src/orchestration`, because visualization subscribes and may not import orchestration.
+  - The prototype simulation was split. `sim/runner.ts` (story runner) publishes events and waits for the world's reports; it never touches the world. `sim/world.ts` changes only through `reactToEvent` and its own animation, and reports `agent_move_started`, `agent_arrived` and `artifact_handoff_completed`. `sim/session.ts` runs both on one clock and handles the loop.
+  - The world derives the Core's mood, the options display, the budget cue, station headlines and source indicators from events (`StoryView`, `ModuleRuntime.headline`) instead of reading story signals. Module visuals are chosen by kind (`presentationFor`).
+  - The fixture's `UAE_TIMELINE` replaces `UAE_STORY`, `MODULE_CHANGES`, `MODULE_HEADLINES` and the script's narration strings. `src/state/apply-event.ts` (`applyWorkspaceEvent`, `connectWorkspace`) replaces `story.ts` and the Phase 9 polling bridge (`workspace-sync.ts`, removed).
+  - The steps list and caption are narrated from the event history (`narration.ts`). The budget autoplay answer is recorded as `source: "demo"`, `answeredBy: "autoplay"`; a click on Confirm is `source: "user"`.
+  - A new instant `planning` story moment publishes `planning_started`.
+  - Timing compared with the Phase 9 code: the same order of story moments, each at most 0.17 s later over the 58.7 s story (one frame per arrival).
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -156,6 +168,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Store tests: the seeded fixture validates; malformed seeds, patches and unknown ids are refused with no change; untouched records keep their identity; task lifecycle per agent; module reserve, open, update and remove; evidence provenance, duplicates and dangling references refused; the assumption order; the human-input request answered once; scenario range; finding lines ordered, with superseded and resolved items dropped.
   - Bridge tests: fixture agents match the rendered roster; no fixture fact is marked verified; the whole story applies with no rejected fact; a full run ends answered with a final recommendation, all six modules mirrored, the budget answered, the assumption rejected, a failed Orion task, and every agent with a task; the findings at the risk check and after the shift match the approved HUD line for line; runs are deterministic; the store resets on loop.
   - Chrome at 1440×900 at 16 s, 27 s (budget question), 44 s and 62 s (answer): unchanged from the Phase 8 screens, 60 FPS. Console shows only the known favicon 404 and three.js `Clock` notice.
+- Phase 10 typed event system pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 67 in 8 files (9 new bus tests, 8 new event-driven world and store tests; the old bridge tests were ported).
+  - Bus tests: stamping and order, malformed and unknown drafts rejected and not recorded, unknown fields stripped, type filters and unsubscribe, listener-published events delivered in one global order, a failing listener isolated, bounded history, a JSON round trip through validation, and the specification's catalog present.
+  - World tests: all earlier story tests on the new session (order, every state, determinism over the full event history, budget pause with user and autoplay answers, stations, layout stability, dissolve, Core and scenarios, loop); no agent moves without an assignment and every arrival is reported; assign, move-started and arrival come in order with the right sources; the world acts out events with no runner (an unknown module kind, an unknown agent ignored).
+  - Store tests: a full run with zero rejected events and zero listener errors validates; findings match the approved HUD line for line; the store's agent states equal the world's at every frame for 60 s; determinism and loop reset; events referencing unknown things are refused; the steps list uses only the current run's history.
+  - Chrome at 1440×900 at 16 s, 27 s, 44 s and 62 s: unchanged from the approved screens, 60 FPS. Show steps, Confirm and Restart checked live. Console shows only the known favicon 404 and three.js `Clock` notice.
+  - Previews: `events-handoff-16s.png`, `events-critic-44s.png`, `events-answer-62s.png`, `events-steps-budget.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: reduced-motion behavior for the 3D scene (no 3D reduced-motion handling yet), Three.js memory over long sessions, and Safari/Firefox.
@@ -171,7 +190,8 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
 - No favicon (404 in console).
-- Phase 9 bridge: until Phase 13 the store is fed from the prototype world, so the story's facts live in the fixture while its timing still lives in `sim/script.ts`. The HUD's controls (pause, speed, confirm) still act on the world, not the store.
+- Until Phase 13 the story runner lives in the visualization layer (`sim/runner.ts`), and story timing still lives in `sim/script.ts`. Pause and speed act on the session clock.
+- The event history is capped at 1000 events per session (about three demo loops).
 - Development-only npm audit entries in the eslint-config-next → braces chain remain (production audit clean). ESLint 9 is deprecated upstream but required by Next.js plugin peers.
 - The default shell Node is v12; use `nvm use` (Node 24) before project scripts.
 - The secondary specification lives outside the repository at `/Users/youstina/Downloads/MORPH_CODEX_MASTER_v2.md`.
@@ -185,13 +205,20 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: unused identity fields (`face`, hair and prop) in `roster.ts`, the outdated `/dev/design-system` page, and the missing favicon. Left as is.
 - No findings for secrets, provider leakage or arbitrary code execution: there are no providers or AI calls yet.
 
+## Audit 2026-10-07 (after Phases 8–10)
+- No Critical or High findings.
+- Medium, scheduled: the prototype story runner (`sim/runner.ts`) and the story script are demo orchestration living in the visualization layer. They are isolated behind the bus, and Phase 13 moves them into `src/orchestration` as the demo runtime.
+- Medium, scheduled: events update the store directly through `applyWorkspaceEvent`. Phase 11 puts the state-changing part behind validated `MorphOperation`s.
+- Low: agent names exist in both `roster.ts` and the fixture (a test keeps them equal); the world casts scenario ids to the three demo keys; the module presentation registry sits in `sim/script.ts` next to the demo script. Left as is.
+- Ownership: the world no longer reads story signals; the store no longer polls the world; the HUD reads facts from the store and narration from event history. Dependencies: none added in Phase 10. Performance: unchanged, 60 FPS. Safety: events are schema-validated with length limits, unknown fields are stripped, and summaries are fixed fixture text.
+
 ## Deferred Decisions
-- Phases 10–11: event and operation contracts.
+- Phase 11: operation contract.
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 19: AI provider/model. Phase 20: search provider.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 10 — Typed events and the event log, once the user authorizes it. It starts with the event-contract decision gate. Phase 10 is not authorized yet. An architecture audit is due after Phase 10 or 11 (last one after Phase 7).
+Phase 11 — MorphOperation protocol, once the user authorizes it. It starts with the operation-contract decision gate. Phase 11 is not authorized yet.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

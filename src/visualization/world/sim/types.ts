@@ -1,6 +1,7 @@
 export type Vec2 = readonly [x: number, z: number];
 
 export { AGENT_STATES, type AgentState } from "@/state/domain";
+import type { AgentTarget, Travel } from "@/events/schema";
 import type { AgentState } from "@/state/domain";
 
 export type AgentId = "nova" | "orion" | "sage" | "brix" | "vex" | "lume";
@@ -28,6 +29,11 @@ export interface ModuleSpec {
   color: string;
 }
 
+export interface ModuleHeadline {
+  headline: string;
+  detail: string;
+}
+
 export interface ModuleRuntime {
   spec: ModuleSpec;
   /** False while the slot is reserved but the module has not materialized yet. */
@@ -40,6 +46,8 @@ export interface ModuleRuntime {
   size: number;
   activity: number;
   evidence: number;
+  /** What the floating panel says; set by `module_updated` events. */
+  headline: ModuleHeadline | null;
   /** Layout result: target floor position, bearing from the Core, and the crowding scale. */
   position: Vec2;
   bearing: number;
@@ -89,7 +97,7 @@ export type Action =
       zone?: ModuleId;
       evidence?: number;
     }
-  | { kind: "emit"; signal: string; log?: string }
+  | { kind: "emit"; signal: string }
   | {
       kind: "handoff";
       to: AgentId;
@@ -98,31 +106,30 @@ export type Action =
       task: string;
     };
 
+/** An agent as the world shows it: where it is, which way it faces and the state it acts out. */
 export interface AgentRuntime {
   id: AgentId;
   position: [number, number];
   facing: number;
   state: AgentState;
   task: string;
-  progress: number;
   moving: boolean;
   zone: ModuleId | null;
   route: [number, number][];
-  actionIndex: number;
-  actionElapsed: number;
-  actionStarted: boolean;
-  hasWorked: boolean;
+  /** The current assignment, from `agent_assigned` until the world reports `agent_arrived`. */
+  trip: { target: AgentTarget; travel: Travel; elapsed: number; started: boolean } | null;
+  /** Agent this one faces while handing something over. */
+  facingAgent: AgentId | null;
 }
 
 export interface ArtifactFlight {
-  id: number;
+  id: string;
   kind: ArtifactKind;
   from: AgentId;
   to: AgentId;
   start: [number, number];
   startedAt: number;
   duration: number;
-  signal: string;
 }
 
 export interface LogEntry {
@@ -140,6 +147,19 @@ export interface ScenarioWeights {
   delay: number;
 }
 
+/** What the world has been told about the run so far; drives the Core, the options display and the budget cue. */
+export interface StoryView {
+  objectiveAt: number | null;
+  planningAt: number | null;
+  planAt: number | null;
+  challengeOpen: boolean;
+  synthesisAt: number | null;
+  answeredAt: number | null;
+  budgetPending: boolean;
+  scenarios: ScenarioWeights | null;
+}
+
+/** The world layer's state. It changes only in response to events and through its own animation. */
 export interface World {
   time: number;
   cycle: number;
@@ -149,9 +169,6 @@ export interface World {
   moduleOrder: ModuleId[];
   /** Bumped whenever modules are added, removed or re-laid out. */
   layoutVersion: number;
-  signals: Map<string, number>;
   artifacts: ArtifactFlight[];
-  log: LogEntry[];
-  nextId: number;
-  endedAt: number | null;
+  story: StoryView;
 }

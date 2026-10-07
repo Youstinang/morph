@@ -15,8 +15,8 @@ import {
   type Mesh,
 } from "three";
 import { DISSOLVE_SECONDS, MATERIALIZE_SECONDS, moduleScale } from "../sim/modules";
-import type { ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
-import { SCENARIO_LABELS, type ModuleHeadline } from "../sim/script";
+import { SCENARIO_LABELS } from "../sim/script";
+import type { ModuleHeadline, ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
 import { moduleHeadline, scenarioWeights } from "../sim/world";
 import { geo } from "./geometry";
 import { Bay, CoreTrack, ServiceArm, isPresent } from "./module-fixtures";

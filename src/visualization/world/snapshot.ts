@@ -1,3 +1,5 @@
+import type { WorkspaceEvent } from "@/events/schema";
+import { narrate } from "./narration";
 import type { CoreState, LogEntry, World } from "./sim/types";
 import { coreState } from "./sim/world";
 
@@ -10,12 +12,18 @@ export interface LabSnapshot {
   caption: LogEntry | null;
 }
 
-export function takeSnapshot(world: World): LabSnapshot {
+export function takeSnapshot(world: World, history: readonly WorkspaceEvent[]): LabSnapshot {
+  const lines: LogEntry[] = [];
+  for (const event of history) {
+    if (event.cycle !== world.cycle) continue;
+    const line = narrate(event);
+    if (line) lines.push(line);
+  }
   return {
     time: world.time,
     cycle: world.cycle,
     core: coreState(world),
-    log: world.log.slice(-8).reverse(),
-    caption: world.log.findLast((entry) => entry.beat) ?? null,
+    log: lines.slice(-8).reverse(),
+    caption: lines.findLast((entry) => entry.beat) ?? null,
   };
 }

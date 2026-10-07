@@ -33,15 +33,16 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 | `src/app` | Routes (`/`, `/demo`, `/showcase`, `/lab`), layout, global tokens | `src/app` |
 | `src/visualization/ui` | 2D primitives and HUD | `src/components/ui`, `src/components/hud` |
 | `src/visualization/world` | `/lab` world slice: `scene/` (lighting, orbital station deck, Intent Core, characters, zones, artifacts, tag projection), `sim/` (prototype agent simulation and script), HUD and scene composition | `src/world/*` |
-| `src/state` | Domain schemas, store, selectors, MorphOperations | `src/morph/domain`, `state`, `operations` |
-| `src/orchestration` | Event bus, orchestrator, demo runtime | `src/morph/events`, `orchestration`, `demo` |
+| `src/events` | `WorkspaceEvent` contract, in-memory event bus, shared agent-state transitions | `src/morph/events` |
+| `src/state` | Domain schemas, store, selectors, event application, MorphOperations | `src/morph/domain`, `state`, `operations` |
+| `src/orchestration` | Orchestrator, demo runtime | `src/morph/orchestration`, `demo` |
 | `src/server/providers` | Secret-bearing AI provider adapters | `src/morph/providers` |
 | `src/server/tools` | Server-side tool adapters | `src/morph/tools` |
 | `src/observability` | History, telemetry, explanations | — |
 | `src/config` | Environment validation | `src/lib` |
 | `tests` | Shared test setup and integration tests | `tests` |
 
-ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
+The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
 
 ## Technology
 
@@ -88,6 +89,6 @@ Added 2026-10-06 for the world slice: three 0.186.1, @react-three/fiber 9.8.1, @
 | 25 | Extreme visual polish | Visual gate; audio decision |
 | 26 | Showcase / deployment | Hosting decision + visual gate |
 
-Current world slice: `src/visualization/world/sim` is a deterministic, fixed-step prototype simulation. It covers agents with 13 states, per-agent action scripts, signals, zone materialization, artifact flights, the human-input pause, and scenario weights. It is tested and drives the 3D scene and HUD through a ref plus a throttled snapshot. It is explicitly *prototype state*: Phases 9–13 replace it with the canonical workspace store, typed events, `MorphOperation`s, and the demo runtime. The scene components read only the world shape, so the swap stays contained.
+Current world slice (after Phase 10): `src/visualization/world/sim` holds two parts that meet only on the event bus. The prototype story runner (`runner.ts`) plays per-agent scripts by publishing events and waits for the world's reports. The world (`world.ts`) changes only in response to events and through its own animation (walking, artifact flights, materialize and dissolve), and reports arrivals and landed handoffs back. `session.ts` puts both on one fixed-step clock and handles the loop. The canonical store and the HUD's steps list subscribe to the same bus. Phases 11–13 add operations and move the runner into the orchestration layer as the demo runtime.
 
 Note: in this order, the world (Phases 4–8) is prototyped before the canonical state (Phase 9). Prototype phases drive visuals from local typed preview controls under `/lab` that mirror the planned state/event shapes. Phases 9–13 then rewire those visuals to canonical state and events. Prototype state must not become a competing domain model.

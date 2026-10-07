@@ -2,16 +2,16 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useRef, useState } from "react";
+import { connectWorkspace } from "@/state/apply-event";
 import { createUaeWorkspace } from "@/state/fixtures/uae-market";
 import { WorkspaceProvider } from "@/state/react";
 import { createWorkspaceStore } from "@/state/store";
 import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
 import { LabHud } from "./lab-hud";
+import { createDemoSession } from "./sim/session";
 import type { AgentId, World } from "./sim/types";
-import { confirmBudget, createWorld } from "./sim/world";
 import { takeSnapshot, type LabSnapshot } from "./snapshot";
-import { createWorkspaceSync } from "./workspace-sync";
 import "./lab.css";
 
 const LabScene = dynamic(() => import("./lab-scene"), {
@@ -22,12 +22,15 @@ const LabScene = dynamic(() => import("./lab-scene"), {
 const SPEEDS = [1, 2] as const;
 
 export function LabExperience() {
-  const [initialWorld] = useState(createWorld);
-  const worldRef = useRef<World>(initialWorld);
+  const [{ session, store }] = useState(() => {
+    const session = createDemoSession();
+    const store = createWorkspaceStore(createUaeWorkspace());
+    connectWorkspace(session.bus, store, createUaeWorkspace);
+    return { session, store };
+  });
+  const worldRef = useRef<World>(session.world);
   const tags = useRef<TagRegistry>({});
-  const [store] = useState(() => createWorkspaceStore(createUaeWorkspace()));
-  const [sync] = useState(() => createWorkspaceSync(store));
-  const [snapshot, setSnapshot] = useState<LabSnapshot>(() => takeSnapshot(initialWorld));
+  const [snapshot, setSnapshot] = useState<LabSnapshot>(() => takeSnapshot(session.world, session.bus.history()));
   const [paused, setPaused] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
   const [labels, setLabels] = useState(true);
@@ -35,17 +38,22 @@ export function LabExperience() {
   const [selected, setSelected] = useState<AgentId | null>(null);
 
   const handleSnapshot = useCallback(
-    (world: World) => {
-      sync(world);
-      setSnapshot(takeSnapshot(world));
+    (world: World) => setSnapshot(takeSnapshot(world, session.bus.history())),
+    [session],
+  );
+  const step = useCallback(
+    (dt: number) => {
+      session.step(dt);
+      return session.world;
     },
-    [sync],
+    [session],
   );
   const restart = useCallback(() => {
-    worldRef.current = createWorld(worldRef.current.cycle + 1);
-    handleSnapshot(worldRef.current);
+    session.restart();
+    worldRef.current = session.world;
+    handleSnapshot(session.world);
     setPaused(false);
-  }, [handleSnapshot]);
+  }, [session, handleSnapshot]);
 
   return (
     <WorkspaceProvider store={store}>
@@ -55,6 +63,7 @@ export function LabExperience() {
             worldRef={worldRef}
             paused={paused}
             speed={SPEEDS[speedIndex] ?? 1}
+            step={step}
             onSnapshot={handleSnapshot}
             selected={selected}
             onSelect={setSelected}
@@ -77,8 +86,8 @@ export function LabExperience() {
           onToggleQuality={() => setQuality((value) => (value === "high" ? "balanced" : "high"))}
           onSelect={setSelected}
           onConfirmBudget={() => {
-            confirmBudget(worldRef.current);
-            handleSnapshot(worldRef.current);
+            session.answerBudget();
+            handleSnapshot(session.world);
           }}
         />
       </main>

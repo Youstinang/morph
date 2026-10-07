@@ -9,7 +9,6 @@ import { hudInsets, type HudInsets } from "./hud-layout";
 import { sectorFramePoints } from "./sim/layout";
 import { AGENT_ORDER, homePosition } from "./sim/roster";
 import type { AgentId, World } from "./sim/types";
-import { stepWorld } from "./sim/world";
 import { Artifacts } from "./scene/artifacts";
 import { Chamber } from "./scene/chamber";
 import { Character } from "./scene/character";
@@ -39,17 +38,19 @@ interface DriverProps {
   worldRef: RefObject<World>;
   paused: boolean;
   speed: number;
+  /** Advances the demo session one fixed step and returns the world to render. */
+  step: (dt: number) => World;
   onSnapshot: (world: World) => void;
 }
 
-function SimulationDriver({ worldRef, paused, speed, onSnapshot }: DriverProps) {
+function SimulationDriver({ worldRef, paused, speed, step, onSnapshot }: DriverProps) {
   const clock = useRef({ accumulator: 0, sinceSnapshot: 0 });
   useFrame((_, delta) => {
     const c = clock.current;
     if (!paused) {
       c.accumulator += Math.min(delta, 0.1) * speed;
       while (c.accumulator >= FIXED_STEP) {
-        worldRef.current = stepWorld(worldRef.current, FIXED_STEP);
+        worldRef.current = step(FIXED_STEP);
         c.accumulator -= FIXED_STEP;
       }
     }
@@ -266,6 +267,7 @@ export default function LabScene({
   worldRef,
   paused,
   speed,
+  step,
   onSnapshot,
   selected,
   onSelect,
@@ -279,7 +281,7 @@ export default function LabScene({
       gl={{ antialias: false, powerPreference: "high-performance" }}
       onPointerMissed={() => onSelect(null)}
     >
-      <SimulationDriver worldRef={worldRef} paused={paused} speed={speed} onSnapshot={onSnapshot} />
+      <SimulationDriver worldRef={worldRef} paused={paused} speed={speed} step={step} onSnapshot={onSnapshot} />
       <Chamber />
       <Station worldRef={worldRef} reflections={quality === "high"} />
       <IntentCore worldRef={worldRef} />

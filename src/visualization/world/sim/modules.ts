@@ -52,6 +52,7 @@ export function createModule(world: World, spec: ModuleSpec, visible = true): vo
     size: 1,
     activity: 0,
     evidence: 0,
+    headline: null,
     position: [0, 0],
     bearing: 0,
     layoutScale: 1,
