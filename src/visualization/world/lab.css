@@ -199,14 +199,14 @@
   pointer-events: auto;
 }
 
-/* Bands (901–1599 px): info band under the header, team row at the bottom, scene full width. */
+/* Bands (over 900 px): team row at the bottom, the findings or answer band above it, the caption above that. */
 .lab-info {
-  top: calc(var(--hud-header) + 8px);
+  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap));
   left: var(--hud-edge);
   right: var(--hud-edge);
   height: var(--hud-info-band);
   flex-direction: row;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: stretch;
 }
 .lab-info > * {
@@ -217,9 +217,10 @@
   margin-right: auto;
 }
 .lab-info .lab-findings {
-  flex: 0 1 620px;
+  flex: 0 1 900px;
   display: flex;
   gap: 18px;
+  overflow-y: auto;
 }
 .lab-findings__list {
   flex: 1;
@@ -276,7 +277,7 @@
 .lab-team {
   left: var(--hud-edge);
   right: var(--hud-edge);
-  bottom: 24px;
+  bottom: var(--hud-bottom-edge);
   flex-direction: row-reverse;
   justify-content: flex-end;
   align-items: flex-end;
@@ -308,10 +309,15 @@
   position: absolute;
   left: var(--hud-edge);
   right: var(--hud-edge);
-  bottom: 84px;
+  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap) * 2 + var(--hud-info-band));
   display: flex;
   justify-content: center;
   pointer-events: none;
+}
+@media (min-width: 901px) {
+  .lab-root:not(:has(.lab-info > *)) .lab-bottom {
+    bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap));
+  }
 }
 .lab-bottom > * {
   pointer-events: auto;
@@ -819,91 +825,8 @@
   display: none;
 }
 
-@media (max-width: 1599px) {
-  .lab-root--showcase .lab-team {
-    justify-content: center;
-  }
-}
-
-@media (min-width: 1600px) {
-  .lab-info,
-  .lab-team {
-    top: 80px;
-    bottom: 24px;
-    height: auto;
-    flex-direction: column;
-    justify-content: flex-start;
-  }
-  .lab-team {
-    left: var(--hud-edge);
-    right: auto;
-    width: var(--hud-left-rail);
-    align-items: stretch;
-  }
-  .lab-team .lab-roster {
-    flex-direction: column;
-  }
-  .lab-team .lab-roster__item {
-    grid-template-columns: 10px auto 1fr auto;
-    grid-template-areas: "dot name role state";
-  }
-  .lab-team .lab-roster__role {
-    display: inline;
-  }
-  .lab-team .lab-steps {
-    margin-top: auto;
-    min-height: 0;
-  }
-  .lab-team .lab-steps ol {
-    position: static;
-    width: 100%;
-  }
-  .lab-info {
-    left: auto;
-    right: var(--hud-edge);
-    width: var(--hud-right-rail);
-  }
-  .lab-info > * {
-    flex-shrink: 0;
-  }
-  .lab-info .lab-detail {
-    width: auto;
-    margin: 0;
-  }
-  .lab-info .lab-findings {
-    display: block;
-    flex: none;
-  }
-  .lab-info .lab-findings ul {
-    display: flex;
-  }
-  .lab-info .lab-options {
-    margin-top: 16px;
-    padding: 14px 0 0;
-    border-left: 0;
-    border-top: 1px solid rgb(120 150 180 / 14%);
-  }
-  .lab-info .lab-recommendation {
-    flex: none;
-    padding: 18px;
-  }
-  .lab-info .lab-findings {
-    padding: 16px 18px;
-  }
-  .lab-info .lab-findings li {
-    font-size: 13px;
-  }
-  .lab-info .lab-recommendation h2 {
-    font-size: 24px;
-  }
-  .lab-root:has(.lab-recommendation) .lab-info .lab-findings {
-    display: block;
-  }
-  .lab-bottom {
-    left: calc(var(--hud-edge) + var(--hud-left-rail) + 20px);
-    right: calc(var(--hud-edge) + var(--hud-right-rail) + 20px);
-    bottom: 24px;
-  }
+.lab-root--showcase .lab-team {
+  justify-content: center;
 }
 
 @media (max-width: 1279px) {
@@ -967,6 +890,7 @@
   }
   .lab-info {
     top: 152px;
+    bottom: auto;
     left: 12px;
     right: 12px;
     height: auto;

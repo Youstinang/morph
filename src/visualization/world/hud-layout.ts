@@ -9,33 +9,31 @@ export interface HudInsets {
 }
 
 /**
- * The deck is wide and shallow, so on most screens the HUD sits in bands above and below it
- * and the scene keeps the full width. Only very wide screens use side columns.
- * Keep these breakpoints in sync with the media queries in `lab.css`.
+ * The deck is wide and shallow, so the scene keeps the full width: the header sits above it and every
+ * text card sits in bands below it (team row, then the findings or answer band, then the caption), where
+ * the floor would otherwise be empty. Keep these sizes in sync with `lab.css`.
  */
 export const COMPACT_MAX = 900;
-export const RAILS_MIN = 1600;
 
 const EDGE = 24;
-const LEFT_RAIL = 224;
-const RIGHT_RAIL = 300;
 const GAP = 20;
 const HEADER = 72;
-const INFO_BAND = 132;
-const BOTTOM_BANDS = 140;
+const BOTTOM_EDGE = 24;
+const TEAM_ROW = 44;
+const BAND_GAP = 10;
+const INFO_BAND = 156;
+const CAPTION = 44;
+const BOTTOM_BANDS = BOTTOM_EDGE + TEAM_ROW + BAND_GAP + INFO_BAND + BAND_GAP + CAPTION + BAND_GAP;
 
 export function hudInsets(width: number): HudInsets {
   if (width <= COMPACT_MAX) return { top: 240, right: 12, bottom: 168, left: 12 };
-  if (width < RAILS_MIN) {
-    return { top: HEADER + INFO_BAND + GAP, right: EDGE, bottom: BOTTOM_BANDS, left: EDGE };
-  }
-  return { top: 80, right: EDGE + RIGHT_RAIL + GAP, bottom: 92, left: EDGE + LEFT_RAIL + GAP };
+  return { top: HEADER + GAP, right: EDGE, bottom: BOTTOM_BANDS, left: EDGE };
 }
 
 export const HUD_CSS_VARS = {
   "--hud-edge": `${EDGE}px`,
-  "--hud-left-rail": `${LEFT_RAIL}px`,
-  "--hud-right-rail": `${RIGHT_RAIL}px`,
-  "--hud-header": `${HEADER}px`,
+  "--hud-bottom-edge": `${BOTTOM_EDGE}px`,
+  "--hud-team-row": `${TEAM_ROW}px`,
+  "--hud-band-gap": `${BAND_GAP}px`,
   "--hud-info-band": `${INFO_BAND}px`,
 } as CSSProperties;
