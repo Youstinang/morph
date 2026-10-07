@@ -98,6 +98,33 @@
   text-transform: uppercase;
   color: var(--emphasis);
 }
+/* The question (or the box to ask one) sits at the bottom, above the team row. */
+.lab-question {
+  position: absolute;
+  left: var(--hud-edge);
+  right: var(--hud-edge);
+  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap));
+  height: var(--hud-question);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.lab-question > * {
+  pointer-events: auto;
+}
+.lab-question .lab-objective {
+  max-width: 760px;
+  padding: 7px 18px;
+  border-radius: 16px;
+  border: 1px solid rgb(120 150 180 / 16%);
+  background: rgb(10 14 19 / 72%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 15px;
+  line-height: 1.35;
+  text-shadow: none;
+}
 .lab-objective {
   margin: 0;
   justify-self: center;
@@ -199,18 +226,19 @@
   pointer-events: auto;
 }
 
-/* Bands (over 900 px): team row at the bottom, the findings or answer band above it, the caption above that. */
+/* Bands (over 900 px), bottom up: team row, question, the findings or answer band, caption. */
 .lab-info {
-  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap));
+  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-question) + var(--hud-band-gap) * 2);
   left: var(--hud-edge);
   right: var(--hud-edge);
-  height: var(--hud-info-band);
+  max-height: var(--hud-info-band);
   flex-direction: row;
   justify-content: center;
-  align-items: stretch;
+  align-items: flex-end;
 }
 .lab-info > * {
   overflow: hidden;
+  max-height: var(--hud-info-band);
 }
 .lab-info .lab-detail {
   width: 260px;
@@ -309,14 +337,14 @@
   position: absolute;
   left: var(--hud-edge);
   right: var(--hud-edge);
-  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap) * 2 + var(--hud-info-band));
+  bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-question) + var(--hud-band-gap) * 3 + var(--hud-info-band));
   display: flex;
   justify-content: center;
   pointer-events: none;
 }
 @media (min-width: 901px) {
   .lab-root:not(:has(.lab-info > *)) .lab-bottom {
-    bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-band-gap));
+    bottom: calc(var(--hud-bottom-edge) + var(--hud-team-row) + var(--hud-question) + var(--hud-band-gap) * 2);
   }
 }
 .lab-bottom > * {
@@ -862,11 +890,16 @@
   .lab-objective__mode {
     display: none;
   }
+  .lab-question {
+    top: 108px;
+    bottom: auto;
+    left: 16px;
+    right: 16px;
+    height: auto;
+    justify-content: flex-start;
+  }
   .lab-objective {
-    grid-column: 1 / -1;
-    grid-row: 2;
     min-width: 0;
-    justify-self: start;
     text-align: left;
     font-size: 14px;
   }
@@ -889,7 +922,7 @@
     display: none;
   }
   .lab-info {
-    top: 152px;
+    top: 184px;
     bottom: auto;
     left: 12px;
     right: 12px;

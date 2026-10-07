@@ -120,31 +120,6 @@ export function LabHud(props: LabHudProps) {
             </span>
           )}
         </div>
-        {asking ? (
-          <form className="lab-ask" onSubmit={submit}>
-            <input
-              autoFocus
-              aria-label="Your question for the team"
-              placeholder="Ask the team a decision question…"
-              maxLength={OBJECTIVE_LIMITS.max}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setAsking(false);
-              }}
-            />
-            <button type="submit" className="action action-primary" disabled={!draftReady}>
-              Ask
-            </button>
-            <button type="button" className="lab-btn" onClick={() => setAsking(false)}>
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <p className="lab-objective">
-            {objective ? objective.text : "\u00a0"}
-          </p>
-        )}
         {!props.clean && (
           <div className="lab-controls" role="toolbar" aria-label="Demo controls">
             {!asking && props.canAsk && (
@@ -200,6 +175,32 @@ export function LabHud(props: LabHudProps) {
           </div>
         )}
       </header>
+
+      <div className="lab-question">
+        {asking ? (
+          <form className="lab-ask" onSubmit={submit}>
+            <input
+              autoFocus
+              aria-label="Your question for the team"
+              placeholder="Ask the team a decision question…"
+              maxLength={OBJECTIVE_LIMITS.max}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setAsking(false);
+              }}
+            />
+            <button type="submit" className="action action-primary" disabled={!draftReady}>
+              Ask
+            </button>
+            <button type="button" className="lab-btn" onClick={() => setAsking(false)}>
+              Cancel
+            </button>
+          </form>
+        ) : (
+          objective && <p className="lab-objective">{objective.text}</p>
+        )}
+      </div>
 
       <div className="lab-team">
         <nav className="lab-roster" aria-label="Team">
