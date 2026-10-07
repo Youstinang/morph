@@ -30,6 +30,9 @@ const PROBLEM_WORDS: Record<ViewProblem | "unsupported", string> = {
   lost: "The graphics card reset, so the 3D deck was switched off. The work goes on in the panels.",
 };
 
+/** The canvas itself can't be read aloud; the panels carry the same information as text. */
+const SCENE_DESCRIPTION = { role: "img", "aria-label": "Live 3D view of the team at work. Everything it shows is also written in the panels." } as const;
+
 let webglSupport: boolean | undefined;
 const neverChanges = () => () => {};
 const readWebglSupport = () => (webglSupport ??= webglAvailable());
@@ -70,8 +73,9 @@ export function LabExperience({ createSession, variant = "full" }: { createSessi
   const lowerOnSlow = useCallback(() => {
     if (!qualityChosen) setQuality(lowerQuality);
   }, [qualityChosen]);
-  const crashed = useCallback(() => setProblem("crashed"), []);
-  const contextLost = useCallback(() => setProblem("lost"), []);
+  // Unmounting a crashed scene also loses its context; the first cause is the one to report.
+  const crashed = useCallback(() => setProblem((problem) => problem ?? "crashed"), []);
+  const contextLost = useCallback(() => setProblem((problem) => problem ?? "lost"), []);
   const retryView = useCallback(() => {
     setProblem(null);
     setViewKey((key) => key + 1);
@@ -114,7 +118,7 @@ export function LabExperience({ createSession, variant = "full" }: { createSessi
           className={`lab-root ${labels ? "" : "lab-root--no-labels"} ${variant === "showcase" ? "lab-root--showcase" : ""}`}
           style={HUD_CSS_VARS}
         >
-          <div className="lab-canvas">
+          <div className="lab-canvas" {...(canDraw && problem === null ? SCENE_DESCRIPTION : {})}>
             {canDraw && problem === null ? (
               <SceneBoundary key={viewKey} onFail={crashed}>
                 <LabScene

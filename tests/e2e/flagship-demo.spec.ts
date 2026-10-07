@@ -10,8 +10,12 @@ test("the flagship demo plays offline to the ending the user's budget picks", as
     if (url.host !== "127.0.0.1:3110" || url.pathname.startsWith("/api/")) outside.push(request.url());
   });
 
-  await page.goto("/lab");
+  const response = await page.goto("/lab");
+  const headers = response?.headers() ?? {};
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
   await expect(page.getByText("Should a European AI software company enter the UAE market?")).toBeVisible();
+  await expect(page.getByText("Sample scenario")).toBeVisible();
   await expect(page.locator("canvas")).toBeVisible();
   await page.getByRole("button", { name: "Playback speed 1x" }).click();
 
@@ -47,6 +51,7 @@ test("the AI endpoints refuse requests from other sites before doing any work", 
 test("each page offers what it is for", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Your question for the team" })).toBeFocused();
+  await expect(page.getByText("Your question is sent to OpenAI")).toBeVisible();
   await expect(page.getByRole("button", { name: "Back to demo" })).toBeVisible();
 
   await page.goto("/demo");
@@ -59,4 +64,10 @@ test("each page offers what it is for", async ({ page }) => {
   await expect(page.getByRole("toolbar")).toHaveCount(0);
   const frame = await page.locator("main").boundingBox();
   expect(frame && Math.round((frame.width / frame.height) * 9)).toBe(16);
+});
+
+test("development pages are hidden in production", async ({ request }) => {
+  for (const path of ["/dev/operations", "/dev/modules", "/dev/models", "/dev/design-system"]) {
+    expect((await request.get(path)).status()).toBe(404);
+  }
 });

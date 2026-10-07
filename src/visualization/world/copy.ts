@@ -17,6 +17,12 @@ export const STATE_WORDS: Record<AgentState, string> = {
   returning: "Heading back",
 };
 
+/** Live questions leave the browser for the AI provider, so visitors are told before they type. */
+export const ASK_PRIVACY_NOTE = "Your question is sent to OpenAI to be answered. Please leave out personal or confidential details.";
+
+/** The deterministic demo is a written sample story, so it is never presented as a recording of a live run. */
+export const SAMPLE_LABEL = { short: "Sample scenario", detail: " · scripted, not live AI" };
+
 export const CORE_WORDS: Record<CoreState, string> = {
   dormant: "Waiting for a question",
   listening: "Reading your question",

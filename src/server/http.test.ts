@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientId, foreignRequest } from "./http";
+import { clientId, foreignRequest, readJson } from "./http";
 
 const request = (headers: Record<string, string>) => new Request("http://morph.example/api/plan", { method: "POST", headers });
 
@@ -29,5 +29,32 @@ describe("same-origin JSON", () => {
     expect(foreignRequest(request({ ...json, "sec-fetch-site": "same-site" }))?.status).toBe(403);
     expect(foreignRequest(request({ ...json, origin: "http://elsewhere.example", host: "morph.example" }))?.status).toBe(403);
     expect(foreignRequest(request({ ...json, origin: "null", host: "morph.example" }))?.status).toBe(403);
+  });
+});
+
+describe("reading bodies", () => {
+  const streamed = (chunks: number, size: number) => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= chunks) return controller.close();
+        pulled += 1;
+        controller.enqueue(new Uint8Array(size).fill(97));
+      },
+    });
+    return { request: new Request("http://morph.example/api/plan", { method: "POST", body, duplex: "half" } as RequestInit), pulled: () => pulled };
+  };
+
+  it("reads small JSON, and refuses what isn't JSON", async () => {
+    const post = (body: string) => new Request("http://morph.example/api/plan", { method: "POST", body });
+    expect(await readJson(post('{"objective":"Should we expand?"}'), 1000)).toEqual({ ok: true, body: { objective: "Should we expand?" } });
+    expect(await readJson(post("{nope"), 1000)).toEqual({ ok: false, error: "unreadable" });
+    expect(await readJson(post(`"${"é".repeat(600)}"`), 1000)).toEqual({ ok: false, error: "too_large" });
+  });
+
+  it("stops reading an undeclared huge body at the limit", async () => {
+    const huge = streamed(1000, 64 * 1024);
+    expect(await readJson(huge.request, 4000)).toEqual({ ok: false, error: "too_large" });
+    expect(huge.pulled()).toBeLessThan(5);
   });
 });

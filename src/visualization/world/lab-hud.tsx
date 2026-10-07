@@ -15,7 +15,7 @@ import {
   selectScenarios,
   webSourceOf,
 } from "@/state/selectors";
-import { CORE_WORDS, STATE_WORDS, sentenceCase } from "./copy";
+import { ASK_PRIVACY_NOTE, CORE_WORDS, SAMPLE_LABEL, STATE_WORDS, sentenceCase } from "./copy";
 import { InputPanel } from "./input-panel";
 import { QUALITY_WORDS, type Quality } from "./quality";
 import { AGENTS } from "./sim/roster";
@@ -107,13 +107,19 @@ export function LabHud(props: LabHudProps) {
     <div className="lab-hud">
       <header className="lab-top">
         <div className="lab-brand">
-          <span className="wordmark">
+          <span className="wordmark" role="heading" aria-level={1}>
             MORPH<span className="wordmark-dot">.</span>
           </span>
           <span className="lab-core">
             <span className="status-dot" /> {CORE_WORDS[snapshot.core]}
           </span>
           {live && !props.clean && <span className="lab-objective__mode">Live AI</span>}
+          {mode === "demo" && (
+            <span className="lab-objective__mode lab-sample">
+              {SAMPLE_LABEL.short}
+              <span className="lab-sample__detail">{SAMPLE_LABEL.detail}</span>
+            </span>
+          )}
           {SHOW_COST && live && !props.clean && cost.modelCalls > 0 && (
             <span className="lab-cost">
               AI cost ≈ ${cost.estimatedUsd.toFixed(4)} · {cost.modelCalls} call{cost.modelCalls === 1 ? "" : "s"} (dev only)
@@ -179,9 +185,13 @@ export function LabHud(props: LabHudProps) {
       <div className="lab-question">
         {asking ? (
           <form className="lab-ask" onSubmit={submit}>
+            <p className="lab-ask__note" id="ask-note">
+              {ASK_PRIVACY_NOTE}
+            </p>
             <input
               autoFocus
               aria-label="Your question for the team"
+              aria-describedby="ask-note"
               placeholder="Ask the team a decision question…"
               maxLength={OBJECTIVE_LIMITS.max}
               value={draft}
