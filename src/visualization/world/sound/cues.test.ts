@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceEvent } from "@/events/schema";
-import { ANY_CUE_GAP_MS, createCuePlanner, SAME_CUE_GAP_MS } from "./cues";
+import { ANY_CUE_GAP_MS, createCuePlanner, moodAfter, SAME_CUE_GAP_MS, type Mood } from "./cues";
 
 const event = (type: string) => ({ type }) as WorkspaceEvent;
 
@@ -21,5 +21,24 @@ describe("sound cues", () => {
     expect(planner.plan(event("module_created"), SAME_CUE_GAP_MS)).toBe("materialize");
     expect(planner.plan(event("task_assigned"), SAME_CUE_GAP_MS + ANY_CUE_GAP_MS - 1)).toBeNull();
     expect(planner.plan(event("task_assigned"), SAME_CUE_GAP_MS + ANY_CUE_GAP_MS)).toBe("dispatch");
+  });
+
+  it("the background hum follows the team: waiting, at work, then settled on the answer", () => {
+    const moods: Mood[] = [];
+    let mood: Mood = "waiting";
+    for (const next of [
+      event("run_started"),
+      event("agent_move_started"),
+      event("objective_received"),
+      { type: "objective_updated", status: "in_progress" } as WorkspaceEvent,
+      { type: "objective_updated", status: "answered" } as WorkspaceEvent,
+      event("agent_idle"),
+      event("run_started"),
+    ]) {
+      mood = moodAfter(mood, next);
+      moods.push(mood);
+    }
+    expect(moods).toEqual(["waiting", "waiting", "working", "working", "settled", "settled", "waiting"]);
+    expect(moodAfter("working", event("run_failed"))).toBe("waiting");
   });
 });

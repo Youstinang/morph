@@ -21,6 +21,23 @@ export const SAME_CUE_GAP_MS = 700;
 /** Different cues never pile on top of each other. */
 export const ANY_CUE_GAP_MS = 150;
 
+/** What the background hum follows: the team waiting for a question, at work on one, or done. */
+export type Mood = "waiting" | "working" | "settled";
+
+export function moodAfter(mood: Mood, event: WorkspaceEvent): Mood {
+  switch (event.type) {
+    case "run_started":
+    case "run_failed":
+      return "waiting";
+    case "objective_received":
+      return "working";
+    case "objective_updated":
+      return event.status === "answered" ? "settled" : "working";
+    default:
+      return mood;
+  }
+}
+
 /** Turns events into cues, dropping repeats that would turn into noise. */
 export function createCuePlanner() {
   const lastPlayed = new Map<Cue, number>();

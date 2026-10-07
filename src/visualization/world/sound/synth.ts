@@ -1,4 +1,4 @@
-import type { Cue } from "./cues";
+import type { Cue, Mood } from "./cues";
 
 interface Note {
   /** Hz; `glideTo` slides the pitch over the note. */
@@ -38,9 +38,23 @@ const VOICES: Record<Cue, Note[]> = {
 
 /** Overall loudness; the cues stay well under speech level. */
 const MASTER_GAIN = 0.16;
+/** The background hum sits under the cues. */
+const AMBIENT_GAIN = 0.025;
+/** Seconds for the hum to ease from one mood to the next. */
+const MOOD_EASE = 1.6;
+
+/** Hum (a soft drone), shimmer (only while the team works) and pad (the settled answer chord). */
+const MOOD_LEVELS: Record<Mood, { hum: number; brightness: number; shimmer: number; pad: number }> = {
+  waiting: { hum: 0.35, brightness: 420, shimmer: 0, pad: 0 },
+  working: { hum: 0.6, brightness: 950, shimmer: 0.2, pad: 0 },
+  settled: { hum: 0.4, brightness: 650, shimmer: 0, pad: 0.32 },
+};
 
 export interface Synth {
   play(cue: Cue): void;
+  /** Starts the background hum on first use and eases it to the team's mood. */
+  setMood(mood: Mood): void;
+  resume(): void;
   /** Lets the audio engine idle while muted; the next cue wakes it. */
   pause(): void;
   dispose(): void;
@@ -58,6 +72,8 @@ export function createSynth(): Synth | null {
   tone.frequency.value = 3200;
   const limiter = context.createDynamicsCompressor();
   master.connect(tone).connect(limiter).connect(context.destination);
+
+  let ambient: ReturnType<typeof createAmbient> | null = null;
 
   return {
     play(cue) {
@@ -83,6 +99,18 @@ export function createSynth(): Synth | null {
         oscillator.stop(end + 0.05);
       }
     },
+    setMood(mood) {
+      ambient ??= createAmbient(context, limiter);
+      const level = MOOD_LEVELS[mood];
+      const now = context.currentTime;
+      ambient.hum.gain.setTargetAtTime(level.hum, now, MOOD_EASE / 3);
+      ambient.brightness.frequency.setTargetAtTime(level.brightness, now, MOOD_EASE / 3);
+      ambient.shimmer.gain.setTargetAtTime(level.shimmer, now, MOOD_EASE / 3);
+      ambient.pad.gain.setTargetAtTime(level.pad, now, MOOD_EASE / 3);
+    },
+    resume() {
+      if (context.state === "suspended") void context.resume();
+    },
     pause() {
       if (context.state === "running") void context.suspend();
     },
@@ -90,4 +118,51 @@ export function createSynth(): Synth | null {
       void context.close();
     },
   };
+}
+
+/** Endless soft oscillators; the mood only changes their levels, so nothing clicks or restarts. */
+function createAmbient(context: AudioContext, output: AudioNode) {
+  const ambient = context.createGain();
+  ambient.gain.value = AMBIENT_GAIN;
+  ambient.connect(output);
+
+  const oscillator = (pitch: number, wave: OscillatorType, into: AudioNode) => {
+    const node = context.createOscillator();
+    node.type = wave;
+    node.frequency.value = pitch;
+    node.connect(into);
+    node.start();
+  };
+  /** A layer silent until its mood calls for it, swelling slowly by `breath` so it never drones flat. */
+  const layer = (breathRate: number, breath: number) => {
+    const level = context.createGain();
+    level.gain.value = 0;
+    level.connect(ambient);
+    const breathing = context.createGain();
+    breathing.connect(level);
+    const depth = context.createGain();
+    depth.gain.value = breath;
+    depth.connect(breathing.gain);
+    oscillator(breathRate, "sine", depth);
+    return { level, input: breathing };
+  };
+
+  const hum = layer(0.07, 0.2);
+  const brightness = context.createBiquadFilter();
+  brightness.type = "lowpass";
+  brightness.frequency.value = MOOD_LEVELS.waiting.brightness;
+  brightness.Q.value = 0.7;
+  brightness.connect(hum.input);
+  oscillator(D3, "triangle", brightness);
+  oscillator(A3, "sine", brightness);
+  oscillator(A3 * 1.003, "sine", brightness);
+
+  const shimmer = layer(0.3, 0.5);
+  oscillator(FS4, "sine", shimmer.input);
+  oscillator(A4 * 1.002, "sine", shimmer.input);
+
+  const pad = layer(0.05, 0.15);
+  for (const pitch of [D4, FS4, A4]) oscillator(pitch, "sine", pad.input);
+
+  return { hum: hum.level, brightness, shimmer: shimmer.level, pad: pad.level };
 }
