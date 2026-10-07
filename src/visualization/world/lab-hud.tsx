@@ -50,6 +50,8 @@ interface LabHudProps {
   onBackToDemo: () => void;
   /** Whether the visitor can ask their own question (live AI). */
   canAsk: boolean;
+  /** Open with the question box ready (the deck is waiting for a first question). */
+  startAsking: boolean;
   /** Recording mode: no toolbar or panel buttons, only what tells the story. */
   clean: boolean;
 }
@@ -76,7 +78,7 @@ export function LabHud(props: LabHudProps) {
   const humanInputs = useWorkspace((workspace) => workspace.humanInputs);
   const cost = useWorkspace((workspace) => workspace.cost);
   const changes = useWorkspace(selectChanges);
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState(props.startAsking && props.canAsk);
   const [draft, setDraft] = useState("");
   const live = mode === "real";
   const draftReady = draft.trim().length >= OBJECTIVE_LIMITS.min;

@@ -48,6 +48,8 @@ export interface LabSession {
   readonly store: WorkspaceStore;
   readonly world: World;
   readonly mode: "demo" | "real";
+  /** Nothing runs yet; the deck waits for the user's first question. */
+  readonly waiting: boolean;
   /** Counts real time at `speed` and returns the world to render. */
   advance(realSeconds: number, speed: number): World;
   restart(): void;

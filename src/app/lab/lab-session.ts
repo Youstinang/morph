@@ -20,6 +20,9 @@ export function createLabSession(options: RunControllerOptions = { requestPlan, 
     get mode() {
       return run.mode;
     },
+    get waiting() {
+      return run.waiting;
+    },
     advance(realSeconds, speed) {
       run.advance(realSeconds, speed);
       return view.world;

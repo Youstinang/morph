@@ -144,3 +144,26 @@ describe("deterministic demo runtime", () => {
     expect(cycleEvents(run).find((e) => e.type === "run_failed")).toMatchObject({ reason: "live AI isn't connected here" });
   });
 });
+
+describe("waiting for the user's first question", () => {
+  it("keeps the deck empty and quiet until a question is asked, and the demo stays one click away", async () => {
+    const plan = vi.fn(async () => ({ ok: false as const, reason: "unused" }));
+    const run = standIn(createRunController({ requestPlan: plan, start: "waiting" }));
+    expect(run.waiting).toBe(true);
+    expect(run.store.getState().workspace.objective).toBeNull();
+    for (let i = 0; i < 120 / FIXED_STEP; i += 1) run.step(FIXED_STEP);
+    expect(run.bus.history()).toHaveLength(0);
+    expect(run.answerInput("anything", 1)).toBe(false);
+
+    run.startLive("Should our bakery deliver through apps?");
+    expect(run.waiting).toBe(false);
+    expect(run.mode).toBe("real");
+    for (let i = 0; i < 5 / FIXED_STEP; i += 1) run.step(FIXED_STEP);
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+
+    run.restart();
+    expect(run.mode).toBe("demo");
+    for (let i = 0; i < 2 / FIXED_STEP; i += 1) run.step(FIXED_STEP);
+    expect(cycleEvents(run).some((event) => event.type === "objective_received")).toBe(true);
+  });
+});

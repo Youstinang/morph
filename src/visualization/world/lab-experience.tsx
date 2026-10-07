@@ -178,6 +178,7 @@ export function LabExperience({ createSession, variant = "full" }: { createSessi
             onAsk={ask}
             onBackToDemo={restart}
             canAsk={variant === "full"}
+            startAsking={session.waiting}
             clean={variant === "showcase"}
             inputAnchor={inputAnchor}
             onAnswer={(requestId, value) => {

@@ -18,7 +18,7 @@ export const STATE_WORDS: Record<AgentState, string> = {
 };
 
 export const CORE_WORDS: Record<CoreState, string> = {
-  dormant: "Starting up",
+  dormant: "Waiting for a question",
   listening: "Reading your question",
   interpreting: "Understanding the question",
   planning: "Making a plan",

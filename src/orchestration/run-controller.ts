@@ -39,6 +39,8 @@ export interface RunController {
   readonly demo: DemoRuntime;
   /** The live question being worked on, otherwise null. */
   readonly live: LiveQuestion | null;
+  /** Nothing is running yet: the deck waits for the user's first question. */
+  readonly waiting: boolean;
   /** Counts real time (scaled by `speed`) and runs as many fixed steps as it covers; returns how many ran. */
   advance(realSeconds: number, speed?: number): number;
   step(dt: number): void;
@@ -62,6 +64,8 @@ export interface RunControllerOptions {
   requestStep?: StepRequester;
   /** How the user's answers to the team's questions reach the server's record of the question. */
   requestAnswer?: AnswerRequester;
+  /** "waiting": an empty deck with the team at home until the user asks a question (or picks the demo). */
+  start?: "demo" | "waiting";
 }
 
 const notConnected: PlanRequester = async () => ({ ok: false, reason: "live AI isn't connected here" });
@@ -76,11 +80,12 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
   const requestPlan = options.requestPlan ?? notConnected;
   let time = 0;
   let cycle = 0;
-  let mode: RunMode = "demo";
+  let waiting = options.start === "waiting";
+  let mode: RunMode = waiting ? "real" : "demo";
   let accumulator = 0;
   const stages = new Set<RunStage>();
   const bus = createEventBus({ clock: () => ({ at: time, cycle }) });
-  const store = createWorkspaceStore(createUaeWorkspace());
+  const store = createWorkspaceStore(waiting ? createLiveWorkspace(LIVE_WORKSPACE_ID) : createUaeWorkspace());
   connectWorkspace(bus, store, () => (mode === "demo" ? createUaeWorkspace() : createLiveWorkspace(LIVE_WORKSPACE_ID)));
   const gate = createOperationGate(store, bus, () => time);
   let demo = createDemoRuntime(bus, gate, () => time, cycle, LOOP_RESTART_DELAY);
@@ -90,6 +95,7 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
     bus.publish({ type: "run_started", workspaceId: mode === "demo" ? DEMO_WORKSPACE_ID : LIVE_WORKSPACE_ID, mode }, mode === "demo" ? "demo" : "user");
 
   function clear(next: RunMode) {
+    waiting = false;
     demo.dispose();
     live?.dispose();
     live = null;
@@ -110,12 +116,13 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
     time += dt;
     stages.forEach((stage) => stage.beforeStep?.(time));
     if (live) live.step(dt);
-    else demo.step(dt);
+    else if (!waiting) demo.step(dt);
     stages.forEach((stage) => stage.afterStep?.(dt));
-    if (!live && demo.endedAt !== null && time - demo.endedAt >= LOOP_RESTART_DELAY) restart();
+    if (!live && !waiting && demo.endedAt !== null && time - demo.endedAt >= LOOP_RESTART_DELAY) restart();
   }
 
-  begin();
+  if (waiting) demo.dispose();
+  else begin();
 
   return {
     bus,
@@ -136,6 +143,9 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
     get live() {
       return live;
     },
+    get waiting() {
+      return waiting;
+    },
     advance(realSeconds, speed = 1) {
       accumulator += Math.min(Math.max(realSeconds, 0), MAX_FRAME) * speed;
       let steps = 0;
@@ -153,10 +163,10 @@ export function createRunController(options: RunControllerOptions = {}): RunCont
       begin();
       live = createLiveQuestion(bus, gate, () => time, cycle, objective, requestPlan, options.requestStep, options.requestAnswer);
     },
-    answerInput: (requestId, value) => (live ? live.answer(requestId, value) : demo.answer(requestId, value, "user")),
+    answerInput: (requestId, value) => (live ? live.answer(requestId, value) : !waiting && demo.answer(requestId, value, "user")),
     skipInput: (requestId) => (live ? live.skip(requestId) : false),
     holdInput: () => {
-      if (!live) demo.hold();
+      if (!live && !waiting) demo.hold();
     },
     attach(stage) {
       stages.add(stage);

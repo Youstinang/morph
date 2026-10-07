@@ -46,7 +46,8 @@ test("the AI endpoints refuse requests from other sites before doing any work", 
 
 test("each page offers what it is for", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Ask a question" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Your question for the team" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Back to demo" })).toBeVisible();
 
   await page.goto("/demo");
   await expect(page.getByRole("button", { name: "Restart" })).toBeVisible();
