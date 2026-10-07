@@ -7,6 +7,8 @@ const environmentSchema = z.object({
   MORPH_PLANNER_MODEL: z.string().trim().min(1).max(60).default("gpt-5.6-luna"),
   /** Researchers search the web first (OpenAI's built-in search, about 1 cent a search); "off" saves that cost. */
   MORPH_WEB_SEARCH: z.enum(["on", "off"]).default("on"),
+  /** Set to "1" by Vercel; its proxy overwrites the client-address headers, so they can be believed. */
+  VERCEL: z.string().optional(),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

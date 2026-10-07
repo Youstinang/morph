@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17, 18, 20, 21, 22 and 23 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18, 20, 21, 22, 23 and 24 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -37,6 +37,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 21 — Explainability (implemented and validated).
 - Phase 22 — Flagship demo choreography (implemented; awaiting the end-of-run visual review).
 - Phase 23 — Performance and reliability (implemented and validated).
+- Phase 24 — Security and tests (implemented and validated).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -210,6 +211,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Automatic step-down: after a 4 s warm-up, drei's `PerformanceMonitor` watches the frame rate; when it stays under 42 FPS the picture drops one preset (shown as "(auto)"). It never steps back up on its own, so it can't flicker. Once the user picks a preset, MORPH stops changing it.
   - The 3D view can fail without stopping the run. With no WebGL 2, a crash inside the 3D view (caught by an error boundary), or a graphics reset (`webglcontextlost`), the 3D view is switched off, a plain notice explains why, and a small timer outside the 3D view keeps the run and the panels going at the same pace. After a crash or reset, "Try the 3D deck again" remounts it where the run has got to.
   - Disposal audit: every per-mount texture, material and buffer is already released through the shared `useDisposable` hook; shared shapes in `scene/geometry.ts` are cached once for the app's lifetime by design. No leaks found.
+- 2026-10-07, Phase 24 (security and tests):
+  - Rate limits no longer trust forgeable address headers. `clientId` believes `x-real-ip` / `x-forwarded-for` only when running on Vercel (`VERCEL=1`), whose proxy overwrites them; anywhere else every caller shares one bucket, so a forged header can't dodge the limits.
+  - `/api/plan`, `/api/agent-step` and `/api/answer` accept only JSON sent from MORPH's own page (`foreignRequest` in `src/server/http.ts`): other content types get 415; a cross-site `Sec-Fetch-Site` or an `Origin` that doesn't match the host gets 403. This runs before anything else, so refused requests never reach the model or the rate limits. A JSON content type can't be sent cross-site without a CORS preflight, which these routes never grant.
+  - End-to-end tests with Playwright (`@playwright/test` 1.63.0, Apache-2.0, dev-only, pinned; listed in the specification's stack; uses the installed Chrome, no browser download). `npm run build && npm run test:e2e` runs `tests/e2e/` against a production server on port 3110.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -351,6 +356,10 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 24 security and tests pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 195 in 27 files. New tests: address headers ignored unless a trusted proxy set them; JSON from the page itself accepted, other content types, other sites and unreadable origins refused; the plan route refuses foreign requests before any model call.
+  - End-to-end, on a production build in Chrome (2 tests, about 30 s): the flagship demo at 2× shows the question and the 3D deck, the user picks the top budget (USD 1,000,000) with the keyboard, the matching ending ("Go in alone, with UAE data hosting") is shown as demo data, and "Why it changed" lists the answer; no page errors and no network or API requests. The AI routes refuse a cross-site origin (403), a non-JSON body (415) and a cross-site fetch (403).
+  - A request from MORPH's own page still passes the new check (dev server). Production build passes; neither key appears in `.next/static`.
 - Phase 23 performance and reliability pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 191 in 26 files. New tests: presets step down one at a time and stop at Performance, and the button cycles through all three; without the 3D view the run keeps advancing at the chosen speed and reports snapshots, stays still when paused and stops when unmounted; a crash in the 3D view is reported and the panels stay up.
   - Chrome at 1440×900:
@@ -439,7 +448,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Medium, fixed in Phase 13: live questions took their team from the demo fixture (`DEMO_AGENTS`); the team is now `src/state/team.ts`.
 - Medium, open (for Phase 24, security): `/api/plan` trusts `X-Forwarded-For` for the per-client limit, so a caller can dodge that limit by faking the header; the hourly server cap (60 questions, about USD 0.05) still bounds spending. It also accepts any content type, so another website could make a visitor's browser send questions (same cap). Fix: rely on the host's client address and require JSON with a same-origin check.
 - Low: a few `as AgentId` casts on event agent ids in the demo runtime (guarded by lookups); the outdated `/dev/design-system` page. Left as is.
-- Dependencies: none added since Phase 9; production audit clean. Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
+- Dependencies: `@playwright/test` added (dev-only) in Phase 24; production audit clean. The full audit reports 5 high-severity advisories in `braces` via `eslint-config-next`'s lint tooling (dev-only, pre-existing; the suggested fix downgrades Next's lint config, so it is left until Next ships an update). Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
 
 ## Audit 2026-10-07 (after Phases 13–15)
 - No Critical or High findings.
@@ -469,7 +478,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23 quality presets: settled within the approved 60/30 FPS targets (three presets, automatic step-down). Phase 25 audio and Phase 26 hosting: decided 2026-10-07 (subtle, muted by default; Vercel, asking right before publishing).
 
 ## Next Allowed Phase
-Phase 24 — Security and tests (authorized as part of the single run).
+Phase 25 — Visual polish and subtle sound (authorized as part of the single run; sound muted by default).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

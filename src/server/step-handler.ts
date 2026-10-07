@@ -1,6 +1,6 @@
 import { runAgentStep, type WebSearch } from "@/orchestration/agent-steps";
 import { StepRequestSchema, doubtedTask, type StepResponse } from "@/state/live-work";
-import { clientId, json, readJson } from "./http";
+import { clientId, foreignRequest, json, readJson } from "./http";
 import type { AiProvider } from "./providers/types";
 import type { RateLimiter } from "./rate-limit";
 import type { RunRegistry } from "./run-registry";
@@ -8,6 +8,8 @@ import type { RunRegistry } from "./run-registry";
 const MAX_BODY_BYTES = 1000;
 
 export interface StepHandlerDeps {
+  /** Believe the hosting proxy\'s client-address headers (only behind one that overwrites them). */
+  trustProxy?: boolean;
   provider: () => AiProvider | null;
   limiter: RateLimiter;
   runs: RunRegistry;
@@ -24,6 +26,8 @@ const reply = (body: StepResponse, status: number, headers: Record<string, strin
  */
 export function createStepHandler(deps: StepHandlerDeps) {
   return async function handle(request: Request): Promise<Response> {
+    const foreign = foreignRequest(request);
+    if (foreign) return reply({ ok: false, reason: foreign.reason, stop: true }, foreign.status);
     const provider = deps.provider();
     if (!provider) return reply({ ok: false, reason: "Live AI isn't set up on this server.", stop: true }, 503);
 
@@ -33,7 +37,7 @@ export function createStepHandler(deps: StepHandlerDeps) {
     if (!parsed.success) return reply({ ok: false, reason: "The request wasn't readable." }, 400);
     const { runId, step } = parsed.data;
 
-    const allowed = deps.limiter.take(clientId(request));
+    const allowed = deps.limiter.take(clientId(request, deps.trustProxy ?? false));
     if (!allowed.ok) {
       return reply({ ok: false, reason: `Too many requests just now. Try again in ${allowed.retryAfterSeconds} seconds.` }, 429, {
         "Retry-After": String(allowed.retryAfterSeconds),

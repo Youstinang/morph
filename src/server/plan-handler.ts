@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { planObjective } from "@/orchestration/planner";
 import { OBJECTIVE_LIMITS, type PlanResponse } from "@/state/plan";
-import { clientId, json, readJson } from "./http";
+import { clientId, foreignRequest, json, readJson } from "./http";
 import type { AiProvider } from "./providers/types";
 import type { RateLimiter } from "./rate-limit";
 import type { RunRegistry } from "./run-registry";
@@ -10,6 +10,8 @@ const MAX_BODY_BYTES = 4000;
 const RequestSchema = z.object({ objective: z.string().trim().min(OBJECTIVE_LIMITS.min).max(OBJECTIVE_LIMITS.max) }).strict();
 
 export interface PlanHandlerDeps {
+  /** Believe the hosting proxy\'s client-address headers (only behind one that overwrites them). */
+  trustProxy?: boolean;
   /** Null when live AI isn't configured (no key on the server). */
   provider: () => AiProvider | null;
   limiter: RateLimiter;
@@ -27,6 +29,8 @@ const reply = (body: PlanResponse, status: number, headers: Record<string, strin
  */
 export function createPlanHandler(deps: PlanHandlerDeps) {
   return async function handle(request: Request): Promise<Response> {
+    const foreign = foreignRequest(request);
+    if (foreign) return reply({ ok: false, reason: foreign.reason }, foreign.status);
     const provider = deps.provider();
     if (!provider) return reply({ ok: false, reason: "Live AI isn't set up on this server." }, 503);
 
@@ -41,7 +45,7 @@ export function createPlanHandler(deps: PlanHandlerDeps) {
       return reply({ ok: false, reason: `Questions need ${OBJECTIVE_LIMITS.min} to ${OBJECTIVE_LIMITS.max} characters.` }, 400);
     }
 
-    const allowed = deps.limiter.take(clientId(request));
+    const allowed = deps.limiter.take(clientId(request, deps.trustProxy ?? false));
     if (!allowed.ok) {
       return reply({ ok: false, reason: `Too many questions just now. Try again in ${allowed.retryAfterSeconds} seconds.` }, 429, {
         "Retry-After": String(allowed.retryAfterSeconds),

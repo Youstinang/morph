@@ -6,4 +6,4 @@ export const dynamic = "force-dynamic";
 
 const services = liveServices();
 
-export const POST = createPlanHandler({ provider: liveProvider, limiter: services.planLimiter, runs: services.runs, webSearch: () => liveSearch() !== null });
+export const POST = createPlanHandler({ provider: liveProvider, limiter: services.planLimiter, trustProxy: services.trustProxy, runs: services.runs, webSearch: () => liveSearch() !== null });

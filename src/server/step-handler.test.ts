@@ -63,7 +63,13 @@ function setup(options: { cost?: number; fail?: boolean; critique?: unknown; pat
   const plan = createPlanHandler({ provider: () => provider, limiter: limiter(), runs, webSearch: () => options.search !== undefined });
   const step = createStepHandler({ provider: () => provider, limiter: limiter(), runs, search: () => options.search ?? null });
   const post = (handle: (r: Request) => Promise<Response>, body: unknown) =>
-    handle(new Request("http://x/api", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }));
+    handle(
+      new Request("http://x/api", {
+        method: "POST",
+        body: typeof body === "string" ? body : JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+      }),
+    );
   const planned = async () => (await post(plan, { objective: "Should our bakery deliver through apps?" })).json();
   const ask = async () => (await planned()).runId as string;
   return { asked, runs, ask, planned, step: (body: unknown) => post(step, body) };

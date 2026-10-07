@@ -15,6 +15,8 @@ interface LiveServices {
   runs: RunRegistry;
   planLimiter: RateLimiter;
   stepLimiter: RateLimiter;
+  /** Running behind Vercel's proxy, whose client-address headers can be believed. */
+  trustProxy: boolean;
 }
 
 const shared = globalThis as typeof globalThis & { __morphLive?: LiveServices };
@@ -24,6 +26,7 @@ export function liveServices(): LiveServices {
     runs: createRunRegistry(),
     planLimiter: createRateLimiter({ perClient: { limit: 5, windowMs: 60_000 }, global: { limit: 60, windowMs: 60 * 60_000 } }),
     stepLimiter: createRateLimiter({ perClient: { limit: 60, windowMs: 60_000 }, global: { limit: 600, windowMs: 60 * 60_000 } }),
+    trustProxy: parseEnvironment(process.env).VERCEL === "1",
   };
   return shared.__morphLive;
 }

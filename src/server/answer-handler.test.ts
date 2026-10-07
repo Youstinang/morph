@@ -12,7 +12,11 @@ function setup(limit = 100) {
   const runId = runs.open("Should our bakery deliver through apps?", SAMPLE_PLAN, usage);
   const handle = createAnswerHandler({ runs, limiter: createRateLimiter({ perClient: { limit, windowMs: 60_000 }, global: { limit: 1000, windowMs: 60_000 } }) });
   const post = async (body: unknown) => {
-    const response = await handle(new Request("http://x/api/answer", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }));
+    const response = await handle(new Request("http://x/api/answer", {
+      method: "POST",
+      body: typeof body === "string" ? body : JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+    }));
     return { status: response.status, body: await response.json() };
   };
   return { runs, runId, post };

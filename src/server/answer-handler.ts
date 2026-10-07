@@ -1,13 +1,15 @@
 import { checkAnswer } from "@/state/input-controls";
 import { AnswerRequestSchema, type AnswerResponse } from "@/state/live-work";
 import { planControl } from "@/state/plan";
-import { clientId, json, readJson } from "./http";
+import { clientId, foreignRequest, json, readJson } from "./http";
 import type { RateLimiter } from "./rate-limit";
 import type { RunRegistry } from "./run-registry";
 
 const MAX_BODY_BYTES = 1000;
 
 export interface AnswerHandlerDeps {
+  /** Believe the hosting proxy\'s client-address headers (only behind one that overwrites them). */
+  trustProxy?: boolean;
   limiter: RateLimiter;
   runs: RunRegistry;
 }
@@ -22,13 +24,15 @@ const reply = (body: AnswerResponse, status: number, headers: Record<string, str
  */
 export function createAnswerHandler(deps: AnswerHandlerDeps) {
   return async function handle(request: Request): Promise<Response> {
+    const foreign = foreignRequest(request);
+    if (foreign) return reply({ ok: false, reason: foreign.reason }, foreign.status);
     const read = await readJson(request, MAX_BODY_BYTES);
     if (!read.ok) return reply({ ok: false, reason: "The request wasn't readable." }, read.error === "too_large" ? 413 : 400);
     const parsed = AnswerRequestSchema.safeParse(read.body);
     if (!parsed.success) return reply({ ok: false, reason: "The request wasn't readable." }, 400);
     const { runId, question, reply: answer } = parsed.data;
 
-    const allowed = deps.limiter.take(clientId(request));
+    const allowed = deps.limiter.take(clientId(request, deps.trustProxy ?? false));
     if (!allowed.ok) {
       return reply({ ok: false, reason: `Too many requests just now. Try again in ${allowed.retryAfterSeconds} seconds.` }, 429, {
         "Retry-After": String(allowed.retryAfterSeconds),

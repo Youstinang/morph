@@ -21,9 +21,16 @@ function setup(reply: ProviderResult<unknown> = { ok: true, value: SAMPLE_PLAN, 
   const handle = createPlanHandler({
     provider: () => (configured ? provider : null),
     limiter: createRateLimiter({ perClient: { limit: 2, windowMs: 60_000 }, global: { limit: 100, windowMs: 60_000 } }),
+    trustProxy: true,
   });
   const post = (body: unknown, headers: Record<string, string> = {}) =>
-    handle(new Request("http://x/api/plan", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body), headers }));
+    handle(
+      new Request("http://x/api/plan", {
+        method: "POST",
+        body: typeof body === "string" ? body : JSON.stringify(body),
+        headers: { "content-type": "application/json", ...headers },
+      }),
+    );
   return { post, calls: () => modelCalls };
 }
 
@@ -56,6 +63,16 @@ describe("/api/plan handler", () => {
     expect(limited.headers.get("retry-after")).toBe("60");
     expect(calls()).toBe(2);
     expect((await post({ objective: "Should our bakery deliver through apps?" }, { "x-forwarded-for": "5.6.7.8" })).status).toBe(200);
+  });
+
+  it("refuses requests that aren't JSON from MORPH's own page before any model call", async () => {
+    const { post, calls } = setup();
+    const objective = { objective: "Should our bakery deliver through apps?" };
+    expect((await post(objective, { "content-type": "text/plain" })).status).toBe(415);
+    expect((await post(objective, { "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await post(objective, { origin: "https://evil.example", host: "morph.example" })).status).toBe(403);
+    expect((await post(objective, { origin: "https://morph.example", host: "morph.example", "sec-fetch-site": "same-origin" })).status).toBe(200);
+    expect(calls()).toBe(1);
   });
 
   it("says when live AI isn't set up, and passes planner failures on as short reasons", async () => {
