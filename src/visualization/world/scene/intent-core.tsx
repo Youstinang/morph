@@ -36,6 +36,7 @@ export const LOOKS: Record<CoreState, CoreLook> = {
   uncertain: { color: "#c3a2ff", energy: 1.0, spin: 0.35, spread: 1.3, coherence: 0.15 },
   converging: { color: "#f2f6ff", energy: 2.4, spin: 1.6, spread: 0.75, coherence: 1 },
   completed: { color: "#bfe8c9", energy: 1.3, spin: 0.3, spread: 0.95, coherence: 0.95 },
+  waiting: { color: "#ffc27a", energy: 0.7, spin: 0.18, spread: 1.05, coherence: 0.75 },
   error: { color: "#ff6b6b", energy: 1, spin: 0.2, spread: 1.2, coherence: 0.1 },
 };
 

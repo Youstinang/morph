@@ -120,6 +120,7 @@ export type CoreState =
   | "uncertain"
   | "converging"
   | "completed"
+  | "waiting"
   | "error";
 
 export type ArtifactKind = "evidence" | "insight" | "flag";
@@ -203,6 +204,9 @@ export interface StoryView {
   answeredAt: number | null;
   budgetPending: boolean;
   scenarios: ScenarioWeights | null;
+  /** The run is paused on something outside the team's reach, or has failed. */
+  waitingAt: number | null;
+  failedAt: number | null;
 }
 
 /** The world layer's state. It changes only in response to events and through its own animation. */

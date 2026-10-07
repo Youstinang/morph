@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 12 — World morphing engine (authorized 2026-10-07: "yes continue and fix any gabs"); awaiting visual approval
+Phase 19 — Objective planner / real AI provider, moved forward by the user (authorized 2026-10-07: "build next phase pls"); complete, no visual checkpoint
 
 ## Status
-Awaiting visual approval — Phase 12 is implemented and validated; it is not Complete until the user approves it visually. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — Phase 19 is implemented and validated (it has no visual checkpoint in the specification; screenshots are recorded below). Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -25,6 +25,8 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 9 — Workspace domain state: Zod schemas, a Zustand store, selectors, and the demo fixture; the HUD reads from the store.
 - Phase 10 — Typed event system: `WorkspaceEvent` contract and in-memory bus; the 3D world, the store and the steps list all run on events.
 - Phase 11 — MorphOperation protocol: every change to the canonical record is a validated operation applied through `applyMorphOperation` and announced by the operation gate; development-only `/dev/operations` page.
+- Phase 12 — World morphing engine: glide, carry, replacement, morph sweep, calm mode, and the `/dev/modules` operation sandbox.
+- Phase 19 (moved forward) — Objective planner / real AI provider: "Ask a question" on `/lab` plans the user's own question with a real model and acts the plan out on the deck.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -123,6 +125,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Calm mode (`motion.ts`, follows the operating-system "reduce motion" setting; also a checkbox in the sandbox): stations fade between places instead of travelling, the camera cuts instead of easing, panel bob, shard drift and the sweep stop. Agents still walk, because their movement is state.
   - `/dev/modules` was rewritten to send operations through the real gate as an AI model would, with presets (Opening plan, New discovery, Priority shift, Rebuild: buy a competitor, Crowd analysis) and per-station controls. Its camera now frames the whole deck.
   - A favicon (`src/app/icon.svg`) was added. Panel titles now redraw when a station is renamed (they never did before).
+- 2026-10-07, Phase 19 (moved forward): the user chose **a question box on the main deck** (the recorded demo plays until a question is typed, then the AI takes over the same deck) and, on scope, **"we need less cost"**, so the AI only plans in this phase (no AI-written station content).
+  - Provider and model (delegated by the user): **OpenAI `gpt-5.6-luna`**, reasoning effort low, chosen after comparing `gpt-5.4-nano`, `gpt-5.4-mini` and `gpt-5.6-luna` on the same question. Luna is the newest model in the cheapest tier (USD 0.20 / 1.20 per million input/output tokens) and gave the most consistent plans; a plan costs about USD 0.0007 and takes about 6 s. OpenAI was chosen over Anthropic for its strict JSON-schema output; the Anthropic key is unused and the provider interface allows adding it. `MORPH_PLANNER_MODEL` overrides the model.
+  - No new dependency: the adapter uses plain `fetch` (the Vercel AI SDK and vendor SDKs were not needed for one structured call).
+  - The model fills in a constrained `Plan`, never operations: MORPH validates it (server and browser), assigns all ids, and converts it to ordinary operations through the gate as the planner model. A small tidy-up step (dropping extras, pointing a task at a station named by title) avoids paying for repairs; otherwise one repair call, then a graceful failure.
+  - Cost and abuse limits: at most 2 model calls and 2000 output tokens per question, 30 s timeout, 5 questions per minute per client and 60 per hour per server process, request size limits, cancellation when the user leaves the question. Usage is recorded in the workspace's cost (`model_call_completed`) and shown in development only.
+  - New events `run_waiting`, `run_failed`, `model_call_completed`; new Core state `waiting` (soft amber). Without research tools the team honestly waits at its stations after planning.
+  - The user's question is never logged; the server logs only failure reasons and call counts.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -212,6 +221,18 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Chrome at 1440×900: `/lab` at 16 s, 27 s, 44 s and 62 s is unchanged from the approved screens, 60 FPS; Show steps, Confirm and Restart checked live; no favicon 404 any more.
   - `/dev/modules` checked live with each preset, a carry across neighborhoods, and calm mode; no console errors. Found and fixed: the sandbox camera cropped the decision neighborhood, so carried stations left the frame.
   - Previews: `morph-rebuild-start.png`, `morph-rebuild-mid.png`, `morph-rebuild-done.png`, `morph-carry.png`, `morph-calm.png`.
+- Phase 19 real AI planner pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass (`/api/plan` is a dynamic route). Tests: 119 in 14 files (22 new).
+  - Plan tests: a valid plan accepted; slips tidied (station named by title, a second task for one agent, unknown station, extra questions); refusals for too many decision stations, duplicate keys, unknown kinds, Nova given a task, extra fields, plain text; the converted operations all accepted by the gate as the planner, with MORPH's ids and the planner's reasons, and no evidence created.
+  - Provider tests (fake fetch): strict JSON-schema request with model, token budget and key header; parsed reply and cost; key refused, rate limit, server error, unreadable reply, broken JSON, refusal, cut-off and empty answers, and network failure all give short reasons that never contain the key; timeout and cancellation.
+  - Planner tests (fake provider): one-call success with the question quoted as data; one repair with the problems listed and usage summed; stop after two calls; provider failure passed through; the JSON schema's enums and limits match `PlanSchema`.
+  - Route tests: success with `no-store`; bad JSON, too short, too long, extra fields and oversized bodies refused with zero model calls; per-client rate limit with `Retry-After` and zero model calls; 503 without a key; 502 with the planner's reason. Rate limiter window and server cap.
+  - Live-run tests (fake requester): the question recorded as the user's; Nova arrives before planning starts; stations created only after the plan; three stations, one assumption, one pending question, cost recorded; assigned agents end waiting at their station spots, the unassigned one idle; Core waiting; zero refusals; a failed plan shows the error, opens nothing, and Nova returns and rests; a malformed plan is refused in the browser; "Back to demo" aborts the request and the demo plays again.
+  - Key safety: the production build contains neither key, and browser bundles don't mention the OpenAI endpoint or the key variable. `.env.local` stays git-ignored.
+  - Live checks against the real model: `/api/plan` returned a valid plan for a new question (bakery delivery apps) in about 6 s. In Chrome at 1440×900, 1024×768 and 390×844: ask, Nova planning, five stations rising, agents walking to them and waiting, assumptions and questions, the dev cost line (about USD 0.0007, 1 call), then "Back to demo"; 60 FPS, no console errors.
+  - Found and fixed: long assumptions and the questions note were clipped in the info band (shorter limits, note moved into the title, at most 2 assumptions); the "Live AI" tag was squeezed by the toolbar (moved under the Core status); at 1024 px the question wrapped into the info band (clamped to two lines, smaller below 1280 px); on phones the header grew and hid the question (labels no longer wrap, the Live tag and cost line are hidden, a shorter "Waiting for research" status).
+  - `/lab` demo at 16 s, 27 s, 44 s and 62 s: unchanged apart from the new "Ask a question" button, 60 FPS.
+  - Previews: `live-ask.png`, `live-planning.png`, `live-plan-waiting.png`, `live-1024.png`, `live-mobile.png`, `live-demo-unchanged-44s.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -227,6 +248,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - A carried station is small (half size) and seen from above in the default view, so the lift reads less strongly than in close views.
 - Overlap-free motion is tested for random reshuffles; a pile-up of many interruptions within a fraction of a second has no guarantee beyond those tests.
 - The OpenAI and Anthropic keys pasted in chat must be revoked and replaced in `.env.local`.
+- Live questions stop after planning: agents wait at their stations because research tools (Phase 20) and live orchestration (Phase 14) aren't built yet. Nova's questions can't be answered yet (Phase 16).
+- Live mode never ends on its own; "Back to demo" or a new question leaves it.
+- Rate limits and the hourly cap are per server process and reset on restart; a multi-instance deployment needs a shared limit (Phase 26).
+- Station panels in live mode show "Looking into it…", because nothing has been researched.
+- Plan quality depends on the model; it is a proposal for what to investigate, never evidence.
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
 - Until Phase 13 the story runner lives in the visualization layer (`sim/runner.ts`), and story timing still lives in `sim/script.ts`. Pause and speed act on the session clock.
@@ -255,11 +281,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 
 ## Deferred Decisions
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 20: search provider.
-- AI provider/model: delegated by the user on 2026-10-07; chosen and recorded in the real AI phase.
+- AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-After the user visually approves Phase 12: the real AI provider and planner (the specification's Phase 19, moved forward by the user's choice on 2026-10-07), once the user authorizes it. Phases 13–18 follow afterwards in order.
+Phase 13 — Deterministic demo runtime, once the user authorizes it (the specification's order resumes after the moved-forward Phase 19). An architecture audit is due first: three phases (11, 12, 19) have completed since the last one.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

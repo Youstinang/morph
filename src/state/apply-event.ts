@@ -14,6 +14,10 @@ const TASK_STATES = new Set<AgentState>(["working", "evaluating", "collaborating
  */
 export function applyActivityEvent(store: WorkspaceStore, event: WorkspaceEvent, seed: () => Workspace): boolean {
   if (event.type === "run_started") return store.getState().reset(seed());
+  if (event.type === "model_call_completed") {
+    store.getState().recordModelUsage(event);
+    return true;
+  }
   const change = agentChange(event);
   if (!change) return false;
   store.getState().setTime(event.at);

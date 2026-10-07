@@ -27,6 +27,7 @@ export const CORE_WORDS: Record<CoreState, string> = {
   uncertain: "Double-checking a doubt",
   converging: "Agreeing on an answer",
   completed: "Answer ready",
+  waiting: "Waiting for research",
   error: "Something went wrong",
 };
 

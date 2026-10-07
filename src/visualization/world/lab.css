@@ -82,6 +82,64 @@
   letter-spacing: -0.01em;
   color: var(--text);
   text-shadow: 0 2px 18px rgb(0 0 0 / 80%);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.lab-objective__mode {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 182 72 / 45%);
+  color: rgb(255 210 150);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lab-cost {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.lab-ask {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(640px, 100%);
+  padding: 6px 6px 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 182 72 / 45%);
+  background: rgb(10 14 19 / 82%);
+  box-shadow: 0 0 40px rgb(255 182 72 / 12%);
+  backdrop-filter: blur(14px);
+}
+.lab-ask input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+.lab-ask .action {
+  min-height: 34px;
+  padding: 0 18px;
+  border-radius: 999px;
+}
+.lab-ask .action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.lab-ask .lab-btn {
+  border-radius: 999px;
+}
+.lab-btn--ask {
+  border-color: rgb(255 182 72 / 55%);
+  color: rgb(255 214 160);
 }
 .lab-controls {
   display: flex;
@@ -95,6 +153,7 @@
   background: rgb(10 14 19 / 70%);
   color: var(--text);
   font-size: 12px;
+  white-space: nowrap;
   backdrop-filter: blur(10px);
 }
 .lab-btn:hover,
@@ -155,6 +214,17 @@
 }
 .lab-info .lab-findings {
   padding: 14px 18px;
+}
+.lab-info .lab-questions {
+  flex-basis: 300px;
+}
+.lab-info .lab-questions ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lab-findings li[data-kind="question"]::before {
+  background: rgb(255 182 72);
 }
 .lab-info .lab-findings li {
   font-size: 12px;
@@ -645,9 +715,19 @@
   }
 }
 
+@media (max-width: 1279px) {
+  .lab-objective {
+    font-size: 15px;
+  }
+}
+
 @media (max-width: 900px) {
   .lab-top {
     grid-template-columns: 1fr auto;
+  }
+  .lab-cost,
+  .lab-objective__mode {
+    display: none;
   }
   .lab-objective {
     grid-column: 1 / -1;

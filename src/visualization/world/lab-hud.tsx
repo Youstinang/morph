@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { BUDGET_ANSWER } from "@/state/fixtures/uae-market";
+import { OBJECTIVE_LIMITS } from "@/state/plan";
 import { useWorkspace } from "@/state/react";
 import {
   findingLines,
@@ -31,7 +32,11 @@ interface LabHudProps {
   onToggleQuality: () => void;
   onSelect: (id: AgentId | null) => void;
   onConfirmBudget: () => void;
+  onAsk: (objective: string) => void;
+  onBackToDemo: () => void;
 }
+
+const SHOW_COST = process.env.NODE_ENV !== "production";
 
 const MAX_FINDINGS = 4;
 
@@ -51,10 +56,25 @@ export function LabHud(props: LabHudProps) {
   const mode = useWorkspace((workspace) => workspace.mode);
   const pending = useWorkspace(selectPendingInput);
   const answered = useWorkspace(selectLatestAnswer);
+  const humanInputs = useWorkspace((workspace) => workspace.humanInputs);
+  const cost = useWorkspace((workspace) => workspace.cost);
+  const [asking, setAsking] = useState(false);
+  const [draft, setDraft] = useState("");
+  const live = mode === "real";
+  const questions = live ? humanInputs.filter((request) => request.status === "pending") : [];
+  const draftReady = draft.trim().length >= OBJECTIVE_LIMITS.min;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!draftReady) return;
+    props.onAsk(draft.trim());
+    setAsking(false);
+    setDraft("");
+  };
 
   const selectedAgent = selected ? agents.find((agent) => agent.id === selected) : null;
   const request = pending ?? answered;
-  const askingBudget = pending !== null || (answered !== null && snapshot.time - answered.answeredAt! < 3);
+  const askingBudget = !live && (pending !== null || (answered !== null && snapshot.time - answered.answeredAt! < 3));
   const findings = useMemo(
     () => findingLines(evidence, assumptions, recommendation).slice(-MAX_FINDINGS),
     [evidence, assumptions, recommendation],
@@ -71,14 +91,49 @@ export function LabHud(props: LabHudProps) {
           <span className="lab-core">
             <span className="status-dot" /> {CORE_WORDS[snapshot.core]}
           </span>
+          {live && <span className="lab-objective__mode">Live AI</span>}
+          {SHOW_COST && live && cost.modelCalls > 0 && (
+            <span className="lab-cost">
+              AI cost ≈ ${cost.estimatedUsd.toFixed(4)} · {cost.modelCalls} call{cost.modelCalls === 1 ? "" : "s"} (dev only)
+            </span>
+          )}
         </div>
-        <p className="lab-objective">{objective ? objective.text : "\u00a0"}</p>
+        {asking ? (
+          <form className="lab-ask" onSubmit={submit}>
+            <input
+              autoFocus
+              aria-label="Your question for the team"
+              placeholder="Ask the team a decision question…"
+              maxLength={OBJECTIVE_LIMITS.max}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setAsking(false);
+              }}
+            />
+            <button type="submit" className="action action-primary" disabled={!draftReady}>
+              Ask
+            </button>
+            <button type="button" className="lab-btn" onClick={() => setAsking(false)}>
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <p className="lab-objective">
+            {objective ? objective.text : "\u00a0"}
+          </p>
+        )}
         <div className="lab-controls" role="toolbar" aria-label="Demo controls">
+          {!asking && (
+            <button type="button" className="lab-btn lab-btn--ask" onClick={() => setAsking(true)}>
+              Ask a question
+            </button>
+          )}
           <button type="button" className="lab-btn" onClick={props.onTogglePause}>
             {props.paused ? "Resume" : "Pause"}
           </button>
-          <button type="button" className="lab-btn" onClick={props.onRestart}>
-            Restart
+          <button type="button" className="lab-btn" onClick={live ? props.onBackToDemo : props.onRestart}>
+            {live ? "Back to demo" : "Restart"}
           </button>
           <button type="button" className="lab-btn" onClick={props.onSpeed} aria-label={`Playback speed ${props.speed}x`}>
             {props.speed}×
@@ -145,10 +200,10 @@ export function LabHud(props: LabHudProps) {
             </p>
           </section>
         )}
-        {(findings.length > 0 || scenarios.length > 0) && (
+        {(findings.length > 0 || scenarios.length > 0 || questions.length > 0) && (
           <section className="lab-findings" aria-label="What we know so far">
             <div className="lab-findings__list">
-              <p className="section-label">What we know so far</p>
+              <p className="section-label">{live ? "What the plan assumes" : "What we know so far"}</p>
               <ul>
                 {findings.map((finding) => (
                   <li key={finding.key} data-kind={finding.kind}>
@@ -157,6 +212,18 @@ export function LabHud(props: LabHudProps) {
                 ))}
               </ul>
             </div>
+            {questions.length > 0 && (
+              <div className="lab-options lab-questions">
+                <p className="lab-options__title">Nova would ask you · answering comes later</p>
+                <ul>
+                  {questions.map((request) => (
+                    <li key={request.id} data-kind="question">
+                      {request.question}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {scenarios.length > 0 && (
               <div className="lab-options">
                 <p className="lab-options__title">How the options compare</p>

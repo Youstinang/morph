@@ -181,6 +181,18 @@ The user said the data read too technically and the UI was too noisy, and chose 
 - **Zone panels:** these show the zone name and the latest plain headline from `ZONE_HEADLINES` (for example, "Data must stay in the UAE / Needs local hosting or a local partner"). Before anything is found they show "Looking into it…". A panel is redrawn only when its headline changes. The decorative charts were removed.
 - **Data source:** findings, headlines and captions come only from signals the story actually emits, so every line on screen corresponds to a real event.
 
+**Live questions (user choice, 2026-10-07: a question box on the main deck).** "Ask a question" in the toolbar turns the question line into a text box (8–300 characters; Enter asks, Escape cancels). Asking clears the deck and plays the user's question on the same deck:
+
+- Nova walks to the Core and plans while the real planner call is in flight (the Core shows "Making a plan").
+- The plan's stations rise (with the morph sweep) and the caption reads "The plan: …" with the planner's one-line interpretation.
+- Each assigned agent walks to its station, then shows "Waiting" with its planned task. Agents without a task stay ready at home.
+- The Core turns soft amber, "Waiting for research", and the caption says live research isn't connected yet. Nothing on screen claims work that isn't happening.
+- The findings card becomes "What the plan assumes" (up to 2 assumptions), and the side column lists "Nova would ask you · answering comes later" (up to 2 questions).
+- A "Live AI" tag sits under the Core status; in development the estimated AI cost and number of calls appear under it. Both are hidden on phones, where "Back to demo" marks the mode.
+- "Back to demo" (in place of Restart) cancels any pending request and restarts the recorded demo.
+- If planning fails, the Core turns red, the caption gives the short reason, and Nova walks home.
+- The question line is clamped to two lines, and button labels never wrap.
+
 ## Audio (optional)
 
 Subtle cues for Core activation, dispatch, movement, transfer, materialization, challenge, scenario shift, and convergence, with a mute toggle. Audio never carries essential information. Inclusion is decided at a later phase.

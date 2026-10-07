@@ -49,7 +49,7 @@ Every event has `seq` (strictly increasing per bus), `at` (seconds on the run cl
 
 | Group | Events |
 | --- | --- |
-| Run | `run_started` |
+| Run | `run_started` (mode demo or real), `run_waiting` (the run can't go further on its own yet), `run_failed`, `model_call_completed` (usage and estimated cost of one AI call; never the prompt, reply or provider) |
 | Objective and planning | `objective_received`, `objective_updated`, `planning_started`, `plan_created` |
 | Workspace morph | `workspace_morph_started`, `workspace_morph_completed`, `module_reserved`, `module_created`, `module_updated` (title, collapse, panel headline), `module_moved`, `module_resized`, `module_emphasized`, `module_removed` |
 | Agent lifecycle | `agent_assigned`, `agent_move_started`, `agent_arrived`, `agent_work_started` (working, evaluating or collaborating), `sources_checked`, `task_completed`, `task_failed`, `retry_requested`, `retry_started`, `agent_waiting`, `agent_idle`, `agent_collaboration_started` |
@@ -97,6 +97,7 @@ Events reference agents, modules, evidence and assumptions by id. Modules carry 
 | `objective_received`, `plan_created`, `assumption_challenged`, `assumption_resolved`, `synthesis_started`, final `recommendation_updated` | The Intent Core changes mood (listening, delegating, uncertain, converging, completed) |
 | `scenario_created` / `scenario_updated` | The Possibility Engine's branches change weight |
 | `human_input_requested` / `human_input_received` | The budget cue appears and clears |
+| `run_waiting` / `run_failed` | The Intent Core turns to "waiting for research" (soft amber, slow) or "something went wrong" (red) |
 
 Visual timing (walk speed, the assignment pause, flight duration, materialize and dissolve, glide and carry durations) stays in the world layer. With reduced motion, stations fade between places and the sweep is skipped; the events and resulting state are identical.
 
@@ -122,6 +123,8 @@ Every operation has an `id`, a `source` (provenance: user, demo, orchestrator or
 - removing evidence that the answer cites or that settled an assumption; a recommendation citing evidence that isn't accepted; a final recommendation without a statement and reason.
 
 Text stays text: the HUD renders it as plain strings, never as HTML.
+
+**Live questions (planner).** The objective planner's reply is not an operation list: it is a `Plan` (`src/state/plan.ts`: interpretation, 2–6 stations, at most one task per agent, up to 2 assumptions and 2 questions), validated on the server and again in the browser. `planToOperations` turns it into ordinary `add_module`, `add_assumption`, `request_human_input` and `assign_agent` operations with ids MORPH assigns, proposed through the gate as `{ kind: "model", label: "Planner", agentId: "nova" }`. Each station's `why` is the planner's one-line reason. The user's question is recorded as `set_objective` from the user.
 
 The operation gate (`src/state/gate.ts`) is the only caller in a run. `gate.submit(input, { as, summary })` stamps the trusted channel's provenance (`as`) over whatever source the proposal claims, applies the operation to the store, and publishes either its record events carrying the operation reference, or `operation_rejected` with the reason. The world reacts only to those published record events, so it never shows a refused change. The development-only page `/dev/operations` sends good and deliberately broken requests through a real gate.
 

@@ -24,6 +24,8 @@ const emptyStory = (): StoryView => ({
   answeredAt: null,
   budgetPending: false,
   scenarios: null,
+  waitingAt: null,
+  failedAt: null,
 });
 
 export function createWorld(cycle = 0): World {
@@ -184,6 +186,12 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
     case "synthesis_started":
       story.synthesisAt = world.time;
       return;
+    case "run_waiting":
+      story.waitingAt = world.time;
+      return;
+    case "run_failed":
+      story.failedAt = world.time;
+      return;
     case "recommendation_updated":
       if (event.recommendation.status === "final") story.answeredAt = world.time;
       return;
@@ -307,7 +315,9 @@ export function stepWorld(world: World, dt: number, report: WorldReport): void {
 
 export function coreState(world: World): CoreState {
   const story = world.story;
+  if (story.failedAt !== null) return "error";
   if (story.answeredAt !== null) return "completed";
+  if (story.waitingAt !== null) return "waiting";
   if (story.synthesisAt !== null) return "converging";
   if (story.challengeOpen) return "uncertain";
   if (story.planAt !== null) return world.time - story.planAt < 3 ? "delegating" : "processing";

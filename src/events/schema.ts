@@ -40,6 +40,18 @@ const event = <T extends string, S extends z.ZodRawShape>(type: T, shape: S) =>
 
 export const EventDraftSchema = z.discriminatedUnion("type", [
   event("run_started", { workspaceId: Id, mode: z.enum(["demo", "real"]) }),
+  /** The run can't go further on its own for now (for example, a capability isn't connected yet). */
+  event("run_waiting", { reason: z.string().min(1).max(240) }),
+  event("run_failed", { reason: z.string().min(1).max(240) }),
+  /** Usage of one finished AI call; never the prompt, the reply or the provider's name. */
+  event("model_call_completed", {
+    agentId: Id,
+    purpose: z.string().min(1).max(40),
+    calls: z.number().int().min(1).max(10),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    estimatedUsd: z.number().nonnegative(),
+  }),
 
   event("objective_received", { objectiveId: Id, text: z.string().min(1).max(600) }),
   event("objective_updated", { status: z.enum(["planning", "in_progress", "answered"]) }),

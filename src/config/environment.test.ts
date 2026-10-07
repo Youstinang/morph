@@ -3,7 +3,7 @@ import { parseEnvironment } from "./environment";
 
 describe("environment validation", () => {
   it("runs without provider credentials or optional configuration", () => {
-    expect(parseEnvironment({})).toEqual({ NODE_ENV: "development" });
+    expect(parseEnvironment({})).toEqual({ NODE_ENV: "development", MORPH_PLANNER_MODEL: "gpt-5.6-luna" });
   });
 
   it.each(["development", "test", "production"])("accepts %s", (mode) => {
@@ -12,7 +12,17 @@ describe("environment validation", () => {
 
   it("does not forward unrelated or secret-bearing process variables", () => {
     expect(parseEnvironment({ NODE_ENV: "production", PRIVATE_TOKEN: "secret" }))
-      .toEqual({ NODE_ENV: "production" });
+      .toEqual({ NODE_ENV: "production", MORPH_PLANNER_MODEL: "gpt-5.6-luna" });
+  });
+
+  it("treats an empty AI key as missing and rejects a malformed one without disclosing it", () => {
+    expect(parseEnvironment({ OPENAI_API_KEY: "" }).OPENAI_API_KEY).toBeUndefined();
+    expect(() => parseEnvironment({ OPENAI_API_KEY: "short-key" })).toThrow("Invalid environment configuration: OPENAI_API_KEY");
+    try {
+      parseEnvironment({ OPENAI_API_KEY: "short-key" });
+    } catch (error) {
+      expect(String(error)).not.toContain("short-key");
+    }
   });
 
   it("rejects invalid configuration without disclosing its value", () => {

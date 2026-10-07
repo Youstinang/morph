@@ -15,6 +15,7 @@ export interface WorkspaceActions {
   updateAgent: (id: string, patch: AgentPatch) => boolean;
   startTask: (agentId: string, title: string, moduleId: string | null) => boolean;
   finishTask: (agentId: string, status: "done" | "failed") => boolean;
+  recordModelUsage: (usage: { calls: number; inputTokens: number; outputTokens: number; estimatedUsd: number }) => void;
 }
 
 export type WorkspaceStoreState = { workspace: Workspace } & WorkspaceActions;
@@ -47,6 +48,21 @@ export function createWorkspaceStore(initial: Workspace): WorkspaceStore {
       updateAgent: (id, patch) => run(t.updateAgent(ws(), id, patch)),
       startTask: (agentId, title, moduleId) => run(t.startTask(ws(), agentId, title, moduleId)),
       finishTask: (agentId, status) => run(t.finishTask(ws(), agentId, status)),
+      recordModelUsage: (usage) => {
+        const cost = ws().cost;
+        set({
+          workspace: {
+            ...ws(),
+            cost: {
+              ...cost,
+              modelCalls: cost.modelCalls + usage.calls,
+              inputTokens: cost.inputTokens + usage.inputTokens,
+              outputTokens: cost.outputTokens + usage.outputTokens,
+              estimatedUsd: cost.estimatedUsd + usage.estimatedUsd,
+            },
+          },
+        });
+      },
     };
   });
 }

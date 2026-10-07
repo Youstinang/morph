@@ -7,6 +7,7 @@ import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
 import { LabHud } from "./lab-hud";
 import { ReducedMotionContext, usePrefersReducedMotion } from "./motion";
+import { requestPlan } from "./plan-client";
 import { createDemoSession } from "./sim/session";
 import type { AgentId, World } from "./sim/types";
 import { takeSnapshot, type LabSnapshot } from "./snapshot";
@@ -48,6 +49,16 @@ export function LabExperience() {
     handleSnapshot(session.world);
     setPaused(false);
   }, [session, handleSnapshot]);
+  const ask = useCallback(
+    (objective: string) => {
+      session.startLive(objective, requestPlan);
+      worldRef.current = session.world;
+      setSelected(null);
+      handleSnapshot(session.world);
+      setPaused(false);
+    },
+    [session, handleSnapshot],
+  );
 
   return (
     <WorkspaceProvider store={session.store}>
@@ -80,6 +91,8 @@ export function LabExperience() {
             onToggleLabels={() => setLabels((value) => !value)}
             onToggleQuality={() => setQuality((value) => (value === "high" ? "balanced" : "high"))}
             onSelect={setSelected}
+            onAsk={ask}
+            onBackToDemo={restart}
             onConfirmBudget={() => {
               session.answerBudget();
               handleSnapshot(session.world);
