@@ -222,6 +222,17 @@
   font-size: 12px;
   line-height: 1.4;
 }
+.lab-findings__source {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lab-findings__source:hover,
+.lab-findings__source:focus-visible {
+  color: inherit;
+}
 .lab-info .lab-recommendation {
   flex: 0 1 560px;
   padding: 14px 18px;

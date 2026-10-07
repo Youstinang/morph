@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { SAMPLE_PLAN } from "@/state/fixtures/sample-plan";
-import { LIVE_LIMITS } from "@/state/live-work";
+import { LIVE_LIMITS, WebNotesSchema } from "@/state/live-work";
 import { createPlanHandler } from "./plan-handler";
 import type { AiProvider, ProviderResult, StructuredRequest } from "./providers/types";
 import { createRateLimiter } from "./rate-limit";
 import { createRunRegistry } from "./run-registry";
 import { createStepHandler } from "./step-handler";
+import type { WebSearch } from "@/orchestration/agent-steps";
+import { z } from "zod";
 
 const usage = { inputTokens: 200, outputTokens: 100, estimatedUsd: 0.0002 };
 const RESEARCH = { finding: "Delivery apps usually take a sizeable cut of each order.", headline: "Apps take a cut", detail: "Commission on every order", kind: "risk" };
@@ -21,7 +23,18 @@ const PATHS = {
 };
 const SYNTHESIS = { statement: "Try one app for three months", reason: "Fees are high but reach grows.", confidence: "low", basis: ["f1", "f9"] };
 
-function setup(options: { cost?: number; fail?: boolean; critique?: unknown; paths?: unknown } = {}) {
+const NOTES = { notes: "Apps in Dubai take 20 to 30 percent per order.", sources: [{ url: "https://example.com/fees", title: "App fees guide" }] };
+const webSearch = (): WebSearch => ({
+  name: "web_search",
+  description: "test",
+  input: z.object({ query: z.string() }),
+  output: WebNotesSchema,
+  async execute() {
+    return { ok: true, value: NOTES, usage: { modelCalls: 1, toolCalls: 1, inputTokens: 5000, outputTokens: 100, estimatedUsd: 0.011 } };
+  },
+});
+
+function setup(options: { cost?: number; fail?: boolean; critique?: unknown; paths?: unknown; research?: unknown; search?: WebSearch } = {}) {
   const asked: StructuredRequest[] = [];
   const provider: AiProvider = {
     name: "fake",
@@ -30,7 +43,7 @@ function setup(options: { cost?: number; fail?: boolean; critique?: unknown; pat
       if (options.fail) return { ok: false, reason: "the AI service is busy or out of credit", usage: null };
       const replies: Record<string, unknown> = {
         morph_plan: SAMPLE_PLAN,
-        morph_research: RESEARCH,
+        morph_research: options.research ?? RESEARCH,
         morph_combine: COMBINE,
         morph_critique: options.critique ?? CRITIQUE,
         morph_recheck: RECHECK,
@@ -47,12 +60,13 @@ function setup(options: { cost?: number; fail?: boolean; critique?: unknown; pat
   let n = 0;
   const runs = createRunRegistry({ newId: () => `run-${String(++n).padStart(4, "0")}` });
   const limiter = () => createRateLimiter({ perClient: { limit: 100, windowMs: 60_000 }, global: { limit: 1000, windowMs: 60_000 } });
-  const plan = createPlanHandler({ provider: () => provider, limiter: limiter(), runs });
-  const step = createStepHandler({ provider: () => provider, limiter: limiter(), runs });
+  const plan = createPlanHandler({ provider: () => provider, limiter: limiter(), runs, webSearch: () => options.search !== undefined });
+  const step = createStepHandler({ provider: () => provider, limiter: limiter(), runs, search: () => options.search ?? null });
   const post = (handle: (r: Request) => Promise<Response>, body: unknown) =>
     handle(new Request("http://x/api", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }));
-  const ask = async () => (await (await post(plan, { objective: "Should our bakery deliver through apps?" })).json()).runId as string;
-  return { asked, runs, ask, step: (body: unknown) => post(step, body) };
+  const planned = async () => (await post(plan, { objective: "Should our bakery deliver through apps?" })).json();
+  const ask = async () => (await planned()).runId as string;
+  return { asked, runs, ask, planned, step: (body: unknown) => post(step, body) };
 }
 
 describe("/api/agent-step handler", () => {
@@ -63,7 +77,7 @@ describe("/api/agent-step handler", () => {
 
     const research = await step({ runId, step: { kind: "research", task: 0 } });
     expect(research.status).toBe(200);
-    expect(await research.json()).toEqual({ ok: true, kind: "research", result: RESEARCH, usage: { calls: 1, ...usage } });
+    expect(await research.json()).toEqual({ ok: true, kind: "research", result: { ...RESEARCH, sources: [] }, usage: { calls: 1, ...usage } });
     const prompt = asked.at(-1)!;
     expect(prompt.prompt).toContain("Should our bakery deliver through apps?");
     expect(prompt.prompt).toContain(SAMPLE_PLAN.tasks[0]!.task);
@@ -74,6 +88,32 @@ describe("/api/agent-step handler", () => {
     const answer = await (await step({ runId, step: { kind: "synthesis" } })).json();
     expect(answer).toMatchObject({ ok: true, kind: "synthesis", result: { statement: SYNTHESIS.statement, basis: ["f1"] } });
     expect(asked.at(-1)!.prompt).toContain(CRITIQUE.note);
+  });
+
+  it("searches before research, counts the search as a call, and re-checks against the same notes", async () => {
+    const { planned, step, asked, runs } = setup({ search: webSearch(), critique: DOUBT, research: { ...RESEARCH, sources: ["s1"] } });
+    const plan = await planned();
+    expect(plan).toMatchObject({ ok: true, webSearch: true });
+    const research = await (await step({ runId: plan.runId, step: { kind: "research", task: 0 } })).json();
+    expect(research).toMatchObject({ ok: true, result: { sources: NOTES.sources }, usage: { calls: 2, inputTokens: 5200 } });
+    expect(asked.at(-1)!.prompt).toContain("s1: App fees guide (example.com)");
+    const run = runs.get(plan.runId)!;
+    expect(run.calls).toBe(1 + 2);
+    expect(run.notes.get(0)).toEqual(NOTES);
+    await step({ runId: plan.runId, step: { kind: "critique" } });
+    expect(asked.at(-1)!.prompt).toContain("[web: example.com]");
+    await step({ runId: plan.runId, step: { kind: "recheck" } });
+    expect(asked.at(-1)!.prompt).toContain("Web notes");
+    expect(run.calls).toBe(1 + 2 + 1 + 1);
+  });
+
+  it("leaves no room for a search step that would pass the call limit", async () => {
+    const { ask, step, runs } = setup({ search: webSearch() });
+    const runId = await ask();
+    await step({ runId, step: { kind: "research", task: 0 } });
+    runs.get(runId)!.calls = LIVE_LIMITS.modelCalls - 1;
+    expect(await (await step({ runId, step: { kind: "research", task: 1 } })).json()).toMatchObject({ ok: false, reason: "this question reached its limit of AI calls" });
+    expect((await step({ runId, step: { kind: "critique" } })).status).toBe(200);
   });
 
   it("weighs the paths once, only after Vex's review, and hands them to the answer", async () => {

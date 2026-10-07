@@ -5,6 +5,8 @@ const environmentSchema = z.object({
   /** Server-side only. Without it, live questions are turned off and the demo still works. */
   OPENAI_API_KEY: z.string().trim().min(20).optional().or(z.literal("").transform(() => undefined)),
   MORPH_PLANNER_MODEL: z.string().trim().min(1).max(60).default("gpt-5.6-luna"),
+  /** Researchers search the web first (OpenAI's built-in search, about 1 cent a search); "off" saves that cost. */
+  MORPH_WEB_SEARCH: z.enum(["on", "off"]).default("on"),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

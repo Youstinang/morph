@@ -11,6 +11,7 @@ import {
   selectPendingInput,
   selectRecommendation,
   selectScenarios,
+  webSourceOf,
 } from "@/state/selectors";
 import { CORE_WORDS, STATE_WORDS, sentenceCase } from "./copy";
 import { InputPanel } from "./input-panel";
@@ -83,6 +84,8 @@ export function LabHud(props: LabHudProps) {
     [evidence, assumptions, recommendation],
   );
   const answer = recommendation?.status === "final" ? recommendation : null;
+  const webBacked = evidence.some((item) => item.status === "accepted" && webSourceOf(item));
+  const answerWebBacked = answer !== null && answer.evidenceIds.some((evidenceId) => evidence.some((item) => item.id === evidenceId && webSourceOf(item)));
 
   return (
     <div className="lab-hud">
@@ -217,11 +220,27 @@ export function LabHud(props: LabHudProps) {
         {(findings.length > 0 || scenarios.length > 0) && (
           <section className="lab-findings" aria-label="What we know so far">
             <div className="lab-findings__list">
-              <p className="section-label">{!live ? "What we know so far" : evidence.length > 0 ? "What the team thinks · AI knowledge, not checked" : "What the plan assumes"}</p>
+              <p className="section-label">
+                {!live
+                  ? "What we know so far"
+                  : evidence.length === 0
+                    ? "What the plan assumes"
+                    : webBacked
+                      ? "What the team found · web pages summarized by AI, not checked"
+                      : "What the team thinks · AI knowledge, not checked"}
+              </p>
               <ul>
                 {findings.map((finding) => (
                   <li key={finding.key} data-kind={finding.kind}>
                     {finding.text}
+                    {finding.source && (
+                      <>
+                        {" "}
+                        <a className="lab-findings__source" href={finding.source.url} target="_blank" rel="noopener noreferrer nofollow">
+                          {finding.source.site}
+                        </a>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -246,7 +265,7 @@ export function LabHud(props: LabHudProps) {
           <section className="lab-recommendation" aria-label="Recommendation">
             <p className="section-label">
               {live
-                ? `Tentative answer · ${answer.confidence} confidence · AI general knowledge, not research`
+                ? `Tentative answer · ${answer.confidence} confidence · ${answerWebBacked ? "partly from web pages, summarized by AI" : "AI general knowledge, not research"}`
                 : `Our answer · ${answer.confidence} confidence · demo data, not live research`}
             </p>
             <h2>{answer.statement}</h2>

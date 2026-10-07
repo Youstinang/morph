@@ -88,7 +88,7 @@ export type ModulePatch = z.infer<typeof ModulePatchSchema>;
 export const SourceSchema = z.object({
   kind: z.enum(["fixture", "user", "tool", "model"]),
   label: z.string().min(1).max(200),
-  url: z.url().optional(),
+  url: z.url({ protocol: /^https?$/ }).max(500).optional(),
   verified: z.boolean(),
 });
 export type Source = z.infer<typeof SourceSchema>;

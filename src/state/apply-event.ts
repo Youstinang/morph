@@ -8,7 +8,7 @@ import type { WorkspaceStore } from "./store";
 const TASK_STATES = new Set<AgentState>(["working", "evaluating", "collaborating", "retrying", "handoff", "failed"]);
 
 /**
- * Records agent activity from events: state, current task and task history. Everything else in the record
+ * Records agent activity from events: state, current task, task history and tool calls. Everything else in the record
  * changes only through the operation gate, so this ignores record events (the gate already applied them).
  * Returns false when the event changes nothing here.
  */
@@ -17,6 +17,11 @@ export function applyActivityEvent(store: WorkspaceStore, event: WorkspaceEvent,
   if (event.type === "model_call_completed") {
     store.getState().recordModelUsage(event);
     return true;
+  }
+  if (event.type === "tool_started" || event.type === "tool_completed" || event.type === "tool_failed") {
+    store.getState().setTime(event.at);
+    if (event.type === "tool_started") return store.getState().recordToolCall({ id: event.toolCallId, agentId: event.agentId, tool: event.tool });
+    return store.getState().recordToolCall({ id: event.toolCallId, status: event.type === "tool_completed" ? "succeeded" : "failed" });
   }
   const change = agentChange(event);
   if (!change) return false;

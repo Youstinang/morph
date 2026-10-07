@@ -25,6 +25,14 @@ export interface FindingLine {
   kind: "fact" | "doubt" | "conclusion";
   text: string;
   at: number;
+  /** The web page a tool-sourced finding came from. */
+  source?: { url: string; site: string };
+}
+
+/** The web page behind a tool-sourced piece of evidence, if any. */
+export function webSourceOf(item: Evidence): { url: string; site: string } | null {
+  if (item.source.kind !== "tool" || !item.source.url) return null;
+  return { url: item.source.url, site: new URL(item.source.url).hostname.replace(/^www\./, "") };
 }
 
 /**
@@ -39,7 +47,8 @@ export function findingLines(
   const lines: FindingLine[] = [];
   for (const item of evidence) {
     if (item.status !== "accepted") continue;
-    lines.push({ key: item.id, kind: item.kind === "risk" ? "doubt" : "fact", text: item.statement, at: item.foundAt });
+    const source = webSourceOf(item);
+    lines.push({ key: item.id, kind: item.kind === "risk" ? "doubt" : "fact", text: item.statement, at: item.foundAt, ...(source ? { source } : {}) });
   }
   for (const item of assumptions) {
     if (item.status !== "open" && item.status !== "challenged") continue;

@@ -4,7 +4,9 @@ import type { Provenance } from "@/state/domain";
 import type { OperationGate } from "@/state/gate";
 import {
   AI_KNOWLEDGE_LABEL,
+  AI_SUMMARY_LABEL,
   LIVE_LIMITS,
+  WEB_SEARCH_TOOL,
   StepResponseSchema,
   type AgentStep,
   doubtedTask,
@@ -27,11 +29,12 @@ export type { AnswerRequester } from "./live-inputs";
 /**
  * Live runtime for a question typed by the user. The user's question is recorded; Nova walks to the Core
  * and plans while the real planner call is in flight; the accepted plan opens its stations and sends the
- * agents to them. Then the team works (user choices 2026-10-07): each agent with a task researches from the
- * model's general knowledge, hands the finding to Sage at the Core, who combines them and briefs Vex; Vex
- * challenges the weakest point and may send one finding back for a re-check; a "Possible paths" station opens
- * where Lume weighs 2–3 paths; Lume and Nova agree on a tentative answer. Every result is unverified model evidence. Without a server run id, the team waits at
- * its stations instead.
+ * agents to them. Then the team works (user choices 2026-10-07): each agent with a task searches the web
+ * when the server can and writes a finding (from general knowledge otherwise), hands it to Sage at the Core,
+ * who combines them and briefs Vex; Vex challenges the weakest point and may send one finding back for a
+ * re-check; a "Possible paths" station opens where Lume weighs 2–3 paths; Lume and Nova agree on a tentative
+ * answer. No result is ever verified: sourced findings are the AI's summary of the pages it found. Without a
+ * server run id, the team waits at its stations instead.
  *
  * Replies arrive asynchronously but are acted on inside `step`, so everything happens on the run clock.
  * Like the demo runtime, it only publishes events and proposes operations through the gate.
@@ -73,6 +76,13 @@ const planner: Provenance = { kind: "model", label: "Planner", agentId: PLANNER_
 const asModel = (agentId: string, label: string): Provenance => ({ kind: "model", label, agentId });
 const notConnected: StepRequester = async () => ({ ok: false, reason: "live AI isn't connected here", stop: true });
 const nameOf = (agentId: string) => TEAM_AGENTS.find((agent) => agent.id === agentId)?.name ?? agentId;
+const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "");
+/** A finding that cites the search's pages is a tool result the AI summarized; never verified either way. */
+function findingSource(result: ResearchResult) {
+  const page = result.sources?.[0];
+  if (!page) return { kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false } as const;
+  return { kind: "tool", label: `Web search, summarized by AI: ${page.title}`.slice(0, 200), url: page.url, verified: false } as const;
+}
 
 export function createLiveQuestion(
   bus: EventBus,
@@ -91,6 +101,9 @@ export function createLiveQuestion(
   let response: PlanResponse | null = null;
   let plan: Plan | null = null;
   let runId: string | null = null;
+  let webSearch = false;
+  /** The web search under way for each research task, by tool call id. */
+  const searching = new Map<number, string>();
   let queue: { agentId: string; moduleId: string; task: string; operation: Record<string, unknown> }[] = [];
   let nextAssignAt = 0;
   const travelling = new Map<string, string>();
@@ -138,6 +151,7 @@ export function createLiveQuestion(
     if (!checked.data.ok) return fail(checked.data.reason.replace(/\.$/, ""));
     plan = checked.data.plan;
     runId = checked.data.runId ?? null;
+    webSearch = checked.data.webSearch === true;
     const ops = planToOperations(plan, prefix);
     moduleIds = ops.moduleIds;
     assumptionIds = ops.assumptions.map((operation) => String(operation.assumptionId));
@@ -315,6 +329,11 @@ export function createLiveQuestion(
       if (kind === "research") {
         const base = { agentId, task: assignment!.task, moduleId };
         publish(event.attempt > 1 ? { type: "retry_started", ...base } : { type: "agent_work_started", activity: "working", ...base });
+        if (webSearch) {
+          const toolCallId = id(`search${task + 1}-${event.attempt}`);
+          searching.set(task, toolCallId);
+          publish({ type: "tool_started", toolCallId, agentId, tool: WEB_SEARCH_TOOL });
+        }
       } else if (kind === "combine") {
         publish({ type: "agent_work_started", agentId, activity: "working", task: "putting the findings together", moduleId: null });
       } else if (kind === "critique") {
@@ -337,6 +356,7 @@ export function createLiveQuestion(
     }
 
     if (event.type === "failed") {
+      if (kind === "research") endSearch(task, event.reason);
       const what = WHAT[kind];
       const stuck = event.willRetry ? `stuck (${event.reason}); trying again shortly` : `stuck: ${event.reason}`;
       publish({ type: "task_failed", agentId, task: stuck.slice(0, 200), moduleId, ...(event.willRetry ? {} : { summary: `${nameOf(agentId)} couldn't finish ${what}: ${event.reason}.`.slice(0, 240) }) });
@@ -348,16 +368,18 @@ export function createLiveQuestion(
       return;
     }
 
-    const source = { kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false } as const;
+    const source = { kind: "model", label: AI_SUMMARY_LABEL, verified: false } as const;
     if (kind === "research") {
       const result = event.value as ResearchResult;
       const evidenceId = id(`ev${task + 1}`);
       const as = asModel(agentId, "Researcher");
+      endSearch(task, result.searchNote ?? null);
+      if (moduleId && result.sources?.length) publish({ type: "sources_checked", agentId, moduleId, total: result.sources.length });
       const added = propose(
-        { operation: "add_evidence", evidence: { id: evidenceId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source } },
+        { operation: "add_evidence", evidence: { id: evidenceId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source: findingSource(result) } },
         `finding-${task}`,
         as,
-        `${nameOf(agentId)}: ${result.finding}`.slice(0, 240),
+        `${nameOf(agentId)}${result.sources?.[0] ? `, from ${hostOf(result.sources[0].url)}` : ""}: ${result.finding}`.slice(0, 240),
       );
       if (added) evidenceFor.set(task, evidenceId);
       if (moduleId) propose({ operation: "update_module", moduleId, changes: { summary: { headline: result.headline, detail: result.detail } } }, `summary-${task}`, as);
@@ -404,7 +426,7 @@ export function createLiveQuestion(
       if (result.verdict === "revised" && previous) {
         const revisedId = id(`ev${task + 1}-rechecked`);
         const added = propose(
-          { operation: "add_evidence", evidence: { id: revisedId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source } },
+          { operation: "add_evidence", evidence: { id: revisedId, statement: result.finding, kind: result.kind, moduleId, foundBy: agentId, source: findingSource(result) } },
           `finding-${task}-rechecked`,
           as,
           `${nameOf(agentId)} re-checked and revised it: ${result.finding}`.slice(0, 240),
@@ -460,6 +482,14 @@ export function createLiveQuestion(
     }
   }
 
+  /** Closes a research task's search: done, or failed with the reason (the finding then rests on general knowledge). */
+  function endSearch(task: number, failure: string | null) {
+    const toolCallId = searching.get(task);
+    if (!toolCallId) return;
+    searching.delete(task);
+    publish(failure ? { type: "tool_failed", toolCallId, reason: failure.slice(0, 240) } : { type: "tool_completed", toolCallId });
+  }
+
   /** Moves Sage, Vex and Lume to the Core once their inputs are settled. */
   let analystSent = false;
   let gathered = false;
@@ -509,6 +539,7 @@ export function createLiveQuestion(
   }
 
   function wrapUp() {
+    for (const task of [...searching.keys()]) endSearch(task, "the team stopped");
     const answered = scheduler!.status("synthesis") === "succeeded";
     phase = answered ? "answered" : "waiting";
     if (!answered) {

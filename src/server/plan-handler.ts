@@ -15,6 +15,8 @@ export interface PlanHandlerDeps {
   limiter: RateLimiter;
   /** Where the question is kept for the team's later steps; without it, plans come back without a run id. */
   runs?: RunRegistry;
+  /** Whether researchers will search the web first, so the browser can show the searches. */
+  webSearch?: () => boolean;
 }
 
 const reply = (body: PlanResponse, status: number, headers: Record<string, string> = {}) => json(body, status, headers);
@@ -49,7 +51,8 @@ export function createPlanHandler(deps: PlanHandlerDeps) {
     const result = await planObjective(provider, parsed.data.objective, { signal: request.signal });
     if (result.ok) {
       const runId = deps.runs?.open(parsed.data.objective, result.plan, result.usage);
-      return reply({ ok: true, plan: result.plan, usage: result.usage, ...(runId ? { runId } : {}) }, 200);
+      const webSearch = runId !== undefined && (deps.webSearch?.() ?? false);
+      return reply({ ok: true, plan: result.plan, usage: result.usage, ...(runId ? { runId } : {}), ...(webSearch ? { webSearch } : {}) }, 200);
     }
     console.warn(`[plan] failed after ${result.usage.calls} call(s): ${result.reason}`);
     return reply({ ok: false, reason: result.reason, usage: result.usage }, 502);

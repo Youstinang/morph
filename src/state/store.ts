@@ -5,8 +5,8 @@ import * as t from "./transitions";
 
 /**
  * The canonical workspace. Its findings, modules, assumptions, scenarios, questions and answer change only
- * through `apply` (validated MorphOperations). Agent activity — state, current task, task history — is
- * recorded directly from activity events. Every action leaves the workspace untouched when it refuses.
+ * through `apply` (validated MorphOperations). Agent activity — state, current task, task history and tool
+ * calls — is recorded directly from activity events. Every action leaves the workspace untouched when it refuses.
  */
 export interface WorkspaceActions {
   reset: (workspace: Workspace) => boolean;
@@ -16,6 +16,8 @@ export interface WorkspaceActions {
   startTask: (agentId: string, title: string, moduleId: string | null) => boolean;
   finishTask: (agentId: string, status: "done" | "failed") => boolean;
   recordModelUsage: (usage: { calls: number; inputTokens: number; outputTokens: number; estimatedUsd: number }) => void;
+  /** Starts a tool call (counted once) or ends a running one; false when it changes nothing. */
+  recordToolCall: (call: { id: string; agentId: string; tool: string } | { id: string; status: "succeeded" | "failed" }) => boolean;
 }
 
 export type WorkspaceStoreState = { workspace: Workspace } & WorkspaceActions;
@@ -62,6 +64,20 @@ export function createWorkspaceStore(initial: Workspace): WorkspaceStore {
             },
           },
         });
+      },
+      recordToolCall: (call) => {
+        const workspace = ws();
+        const known = workspace.toolCalls.find((item) => item.id === call.id);
+        if ("tool" in call) {
+          if (known) return false;
+          const started = { id: call.id, agentId: call.agentId, tool: call.tool, status: "running" as const, startedAt: workspace.time, endedAt: null };
+          set({ workspace: { ...workspace, toolCalls: [...workspace.toolCalls, started], cost: { ...workspace.cost, toolCalls: workspace.cost.toolCalls + 1 } } });
+          return true;
+        }
+        if (!known || known.status !== "running") return false;
+        const ended = { ...known, status: call.status, endedAt: workspace.time };
+        set({ workspace: { ...workspace, toolCalls: workspace.toolCalls.map((item) => (item === known ? ended : item)) } });
+        return true;
       },
     };
   });

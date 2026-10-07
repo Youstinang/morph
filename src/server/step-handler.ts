@@ -1,4 +1,4 @@
-import { runAgentStep } from "@/orchestration/agent-steps";
+import { runAgentStep, type WebSearch } from "@/orchestration/agent-steps";
 import { StepRequestSchema, doubtedTask, type StepResponse } from "@/state/live-work";
 import { clientId, json, readJson } from "./http";
 import type { AiProvider } from "./providers/types";
@@ -11,6 +11,8 @@ export interface StepHandlerDeps {
   provider: () => AiProvider | null;
   limiter: RateLimiter;
   runs: RunRegistry;
+  /** The web search for research steps; null or absent means researchers use general knowledge. */
+  search?: () => WebSearch | null;
 }
 
 const reply = (body: StepResponse, status: number, headers: Record<string, string> = {}) => json(body, status, headers);
@@ -40,18 +42,23 @@ export function createStepHandler(deps: StepHandlerDeps) {
 
     const run = deps.runs.get(runId);
     if (!run) return reply({ ok: false, reason: "this question has expired; ask it again", stop: true }, 404);
-    const refused = deps.runs.refuse(run, step);
+    const search = step.kind === "research" ? (deps.search?.() ?? null) : null;
+    const reserved = search ? 2 : 1;
+    const refused = deps.runs.refuse(run, step, reserved);
     if (refused) return reply({ ok: false, reason: refused.reason, stop: refused.stop }, 409);
 
-    deps.runs.begin(run, step);
-    const outcome = await runAgentStep(provider, run, step, request.signal);
-    deps.runs.charge(run, outcome.usage);
-    const usage = { calls: 1, ...(outcome.usage ?? { inputTokens: 0, outputTokens: 0, estimatedUsd: 0 }) };
+    deps.runs.begin(run, step, reserved);
+    const outcome = await runAgentStep(provider, run, step, { signal: request.signal, search });
+    deps.runs.charge(run, outcome.usage, { made: outcome.modelCalls, reserved });
+    const usage = { calls: outcome.modelCalls, ...(outcome.usage ?? { inputTokens: 0, outputTokens: 0, estimatedUsd: 0 }) };
     if (!outcome.ok) {
       console.warn(`[step] ${step.kind} failed: ${outcome.reason}`);
       return reply({ ok: false, reason: outcome.reason, usage }, 502);
     }
-    if (outcome.kind === "research" && step.kind === "research") run.findings.set(step.task, outcome.result);
+    if (outcome.kind === "research" && step.kind === "research") {
+      run.findings.set(step.task, outcome.result);
+      if (outcome.notes) run.notes.set(step.task, outcome.notes);
+    }
     if (outcome.kind === "combine") run.combined = outcome.result;
     if (outcome.kind === "critique") run.critique = outcome.result;
     if (outcome.kind === "paths") run.paths = outcome.result;
@@ -60,10 +67,10 @@ export function createStepHandler(deps: StepHandlerDeps) {
       run.recheck = outcome.result;
       const task = doubtedTask(run.critique);
       if (task !== null && outcome.result.verdict === "revised") {
-        const { finding, headline, detail, kind } = outcome.result;
-        run.findings.set(task, { finding, headline, detail, kind });
+        const { finding, headline, detail, kind, sources } = outcome.result;
+        run.findings.set(task, { finding, headline, detail, kind, ...(sources ? { sources } : {}) });
       }
     }
-    return reply({ ...outcome, usage }, 200);
+    return reply({ ok: true, kind: outcome.kind, result: outcome.result, usage } as StepResponse, 200);
   };
 }

@@ -4,26 +4,50 @@ import { PlanUsageSchema } from "./plan";
 
 /**
  * The contract for the team's work on a live question after planning, shared by the server (which makes
- * the model calls) and the browser (which schedules the work and shows it). With no research tools yet,
- * every result is the model's general knowledge: recorded as unverified model evidence, never as a fact.
+ * the model calls) and the browser (which schedules the work and shows it). Researchers search the web
+ * first when the server has search; a finding that cites the search's sources is recorded as a tool result
+ * summarized by the AI, and everything else as the model's general knowledge. Neither is ever verified.
  */
 
-/** Limits for one live question (user choice 2026-10-07: raised, with a hard stop kept). The plan counts too. */
+/**
+ * Limits for one live question (user choices 2026-10-07: raised with a hard stop kept; 10 cents once web
+ * search was added). The plan counts too; a research step with a search is two model calls.
+ */
 export const LIVE_LIMITS = {
   concurrency: 4,
   taskSeconds: 60,
   retries: 2,
   modelCalls: 30,
-  usd: 0.05,
+  usd: 0.1,
 } as const;
 
 export const AI_KNOWLEDGE_LABEL = "AI general knowledge, not checked against sources";
+export const AI_SUMMARY_LABEL = "AI summary of the team's findings, not checked against sources";
+export const WEB_SEARCH_TOOL = "web_search";
 
 const Text = (max: number) => z.string().trim().min(1).max(max);
 const Key = z.string().regex(/^(none|[af]\d)$/);
 
+/** A page the web search returned. Only http(s) links are kept, so a link can never run script. */
+export const WebSourceSchema = z.object({ url: z.url({ protocol: /^https?$/ }).max(500), title: Text(160) }).strict();
+export type WebSource = z.infer<typeof WebSourceSchema>;
+/** What the web search tool returns: short notes written from the pages, and the pages themselves. */
+export const WebNotesSchema = z.object({ notes: Text(1500), sources: z.array(WebSourceSchema).min(1).max(5) }).strict();
+export type WebNotes = z.infer<typeof WebNotesSchema>;
+
+/**
+ * `sources` are the search's pages the finding rests on (empty when it rests on general knowledge);
+ * `searchNote` says why there was no search to work from, when one was expected.
+ */
 export const ResearchResultSchema = z
-  .object({ finding: Text(160), headline: Text(40), detail: Text(80), kind: z.enum(["fact", "risk", "constraint"]) })
+  .object({
+    finding: Text(160),
+    headline: Text(40),
+    detail: Text(80),
+    kind: z.enum(["fact", "risk", "constraint"]),
+    sources: z.array(WebSourceSchema).max(3).optional(),
+    searchNote: Text(120).optional(),
+  })
   .strict();
 export type ResearchResult = z.infer<typeof ResearchResultSchema>;
 

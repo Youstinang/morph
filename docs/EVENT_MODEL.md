@@ -54,7 +54,7 @@ Every event has `seq` (strictly increasing per bus), `at` (seconds on the run cl
 | Workspace morph | `workspace_morph_started`, `workspace_morph_completed`, `module_reserved`, `module_created`, `module_updated` (title, collapse, panel headline), `module_moved`, `module_resized`, `module_emphasized`, `module_removed` |
 | Agent lifecycle | `agent_assigned`, `agent_move_started`, `agent_arrived`, `agent_work_started` (working, evaluating or collaborating), `sources_checked`, `task_completed`, `task_failed`, `retry_requested`, `retry_started`, `agent_waiting`, `agent_idle`, `agent_collaboration_started` |
 | Artifacts | `artifact_handoff_started`, `artifact_handoff_completed` |
-| Tools | `tool_started`, `tool_completed`, `tool_failed` (defined; first used by real tools) |
+| Tools | `tool_started`, `tool_completed`, `tool_failed` (live web searches, Phase 20; recorded in the workspace's tool calls) |
 | Evidence and assumptions | `evidence_discovered`, `evidence_removed`, `assumption_created`, `assumption_challenged`, `assumption_resolved` |
 | Human input | `human_input_requested`, `human_input_received`, `human_input_skipped` |
 | Scenarios and outcome | `scenario_created`, `scenario_updated`, `recommendation_updated`, `synthesis_started`, `synthesis_completed` |
@@ -133,7 +133,7 @@ Text stays text: the HUD renders it as plain strings, never as HTML.
 **Live questions (team work, Phase 14).** When the plan reply carries a `runId`, the live question schedules research (one task per planned assignment, starting when the agent has arrived), a critique (after any research succeeds, when Vex is at the Core) and a synthesis (after the critique settles, when Lume is at the Core). Each step is a `POST /api/agent-step` with `{ runId, step }`, where `step` is `{ kind: "research", task }`, `{ kind: "critique" }` or `{ kind: "synthesis" }` (`src/state/live-work.ts`); replies are validated again in the browser. Events per step:
 
 - started: `agent_work_started` (or `retry_started` for a second attempt); synthesis also publishes `agent_collaboration_started` and `synthesis_started` for Lume and Nova.
-- research succeeded: `add_evidence` (source `{ kind: "model", label: "AI general knowledge, not checked against sources", verified: false }`) and `update_module` (the station's headline), proposed as `{ kind: "model", label: "Researcher", agentId }`, then `task_completed`.
+- research started with web search: `tool_started` (`web_search`); research succeeded: `tool_completed` (or `tool_failed` with the reason, when the finding fell back to general knowledge), `sources_checked` with the number of pages cited, `add_evidence` (source `{ kind: "tool", label: "Web search, summarized by AI: …", url, verified: false }` when it cites pages, otherwise `{ kind: "model", label: "AI general knowledge, not checked against sources", verified: false }`) and `update_module` (the station's headline), proposed as `{ kind: "model", label: "Researcher", agentId }`, then `task_completed`.
 - critique succeeded: `challenge_assumption`, or `add_evidence` of kind risk for a doubted finding, as the Critic; or `task_completed` "found no serious weak spot".
 - synthesis succeeded: `update_recommendation` (final, citing the findings it rests on) as the Synthesizer, `update_objective` answered, `synthesis_completed`, `task_completed` for Lume and Nova.
 - failed: `task_failed` with the short reason; skipped: `agent_waiting`.

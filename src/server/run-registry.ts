@@ -1,5 +1,5 @@
 import type { StepContext } from "@/orchestration/agent-steps";
-import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type PathsResult, type QuestionReply, type RecheckResult, type ResearchResult, type SynthesisResult } from "@/state/live-work";
+import { LIVE_LIMITS, doubtedTask, type AgentStep, type CombineResult, type CritiqueResult, type PathsResult, type QuestionReply, type RecheckResult, type ResearchResult, type SynthesisResult, type WebNotes } from "@/state/live-work";
 import type { Plan, PlanUsage } from "@/state/plan";
 
 /**
@@ -22,16 +22,18 @@ export interface RunRecord extends StepContext {
   paths: PathsResult | null;
   answer: SynthesisResult | null;
   replies: Map<number, QuestionReply>;
+  notes: Map<number, WebNotes>;
 }
 
 export interface RunRegistry {
   open(objective: string, plan: Plan, usage: PlanUsage): string;
   get(id: string): RunRecord | null;
-  /** Why this step can't be run now, or null if it can. */
-  refuse(run: RunRecord, step: AgentStep): { reason: string; stop: boolean } | null;
-  /** Counts an attempt before the call is made, so concurrent requests can't overrun the limits. */
-  begin(run: RunRecord, step: AgentStep): void;
-  charge(run: RunRecord, usage: { inputTokens: number; outputTokens: number; estimatedUsd: number } | null): void;
+  /** Why this step can't be run now, or null if it can. `calls` is how many model calls the step may make. */
+  refuse(run: RunRecord, step: AgentStep, calls?: number): { reason: string; stop: boolean } | null;
+  /** Counts an attempt and reserves its calls before they are made, so concurrent requests can't overrun the limits. */
+  begin(run: RunRecord, step: AgentStep, calls?: number): void;
+  /** Releases the reserved calls and records what the step really made and spent. */
+  charge(run: RunRecord, usage: { inputTokens: number; outputTokens: number; estimatedUsd: number } | null, calls?: { made: number; reserved: number }): void;
 }
 
 interface Options {
@@ -77,6 +79,7 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
         paths: null,
         answer: null,
         replies: new Map(),
+        notes: new Map(),
       });
       return id;
     },
@@ -84,9 +87,9 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
       sweep();
       return runs.get(id) ?? null;
     },
-    refuse(run, step) {
+    refuse(run, step, calls = 1) {
       const pending = inFlight.get(run.id) ?? 0;
-      if (run.calls + pending >= LIVE_LIMITS.modelCalls) return { reason: "this question reached its limit of AI calls", stop: true };
+      if (run.calls + pending + calls > LIVE_LIMITS.modelCalls) return { reason: "this question reached its limit of AI calls", stop: true };
       if (run.usd >= LIVE_LIMITS.usd) return { reason: "this question reached its spending limit", stop: true };
       const key = stepKey(step);
       if ((run.attempts.get(key) ?? 0) > LIVE_LIMITS.retries) return { reason: "this task already used its retries", stop: false };
@@ -105,16 +108,16 @@ export function createRunRegistry(options: Options = {}): RunRegistry {
       }
       return null;
     },
-    begin(run, step) {
+    begin(run, step, calls = 1) {
       const key = stepKey(step);
       run.attempts.set(key, (run.attempts.get(key) ?? 0) + 1);
-      inFlight.set(run.id, (inFlight.get(run.id) ?? 0) + 1);
+      inFlight.set(run.id, (inFlight.get(run.id) ?? 0) + calls);
     },
-    charge(run, usage) {
-      const pending = (inFlight.get(run.id) ?? 1) - 1;
+    charge(run, usage, calls = { made: 1, reserved: 1 }) {
+      const pending = (inFlight.get(run.id) ?? calls.reserved) - calls.reserved;
       if (pending > 0) inFlight.set(run.id, pending);
       else inFlight.delete(run.id);
-      run.calls += 1;
+      run.calls += calls.made;
       if (usage) run.usd += usage.estimatedUsd;
     },
   };

@@ -3,7 +3,7 @@ import { parseEnvironment } from "./environment";
 
 describe("environment validation", () => {
   it("runs without provider credentials or optional configuration", () => {
-    expect(parseEnvironment({})).toEqual({ NODE_ENV: "development", MORPH_PLANNER_MODEL: "gpt-5.6-luna" });
+    expect(parseEnvironment({})).toEqual({ NODE_ENV: "development", MORPH_PLANNER_MODEL: "gpt-5.6-luna", MORPH_WEB_SEARCH: "on" });
   });
 
   it.each(["development", "test", "production"])("accepts %s", (mode) => {
@@ -12,7 +12,7 @@ describe("environment validation", () => {
 
   it("does not forward unrelated or secret-bearing process variables", () => {
     expect(parseEnvironment({ NODE_ENV: "production", PRIVATE_TOKEN: "secret" }))
-      .toEqual({ NODE_ENV: "production", MORPH_PLANNER_MODEL: "gpt-5.6-luna" });
+      .toEqual({ NODE_ENV: "production", MORPH_PLANNER_MODEL: "gpt-5.6-luna", MORPH_WEB_SEARCH: "on" });
   });
 
   it("treats an empty AI key as missing and rejects a malformed one without disclosing it", () => {

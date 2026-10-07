@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AnswerRequester, StepRequester } from "@/orchestration/live-question";
 import type { InputValue } from "@/state/input-controls";
 import { SAMPLE_PLAN } from "@/state/fixtures/sample-plan";
-import { AI_KNOWLEDGE_LABEL, LIVE_LIMITS, type AgentStep, type AnswerRequest, type StepResponse } from "@/state/live-work";
+import { AI_KNOWLEDGE_LABEL, AI_SUMMARY_LABEL, LIVE_LIMITS, type AgentStep, type AnswerRequest, type StepResponse } from "@/state/live-work";
 import type { PlanResponse } from "@/state/plan";
 import { coreState } from "@/visualization/world/sim/world";
 import { createLabSession, type LabRun } from "./lab-session";
@@ -84,8 +84,8 @@ function fakeServer(delay: number | ((step: AgentStep) => number) = 2, script: (
 /** How each test's user replies to Nova's question, as soon as it shows; null leaves it open. */
 const replying = new WeakMap<LabRun, InputValue | "skip" | null>();
 
-function setup(server = fakeServer(), reply: InputValue | "skip" | null = 40) {
-  const session = createLabSession({ requestPlan: async () => PLANNED, requestStep: server.requestStep, requestAnswer: server.requestAnswer });
+function setup(server = fakeServer(), reply: InputValue | "skip" | null = 40, planned: PlanResponse = PLANNED) {
+  const session = createLabSession({ requestPlan: async () => planned, requestStep: server.requestStep, requestAnswer: server.requestAnswer });
   server.bind(session);
   replying.set(session, reply);
   session.startLive(QUESTION);
@@ -114,6 +114,33 @@ const cycleEvents = (s: LabRun) => s.bus.history().filter((event) => event.cycle
 const ws = (s: LabRun) => s.store.getState().workspace;
 
 describe("live question: the team works", () => {
+  it("shows each web search, fills the station's sources, and records sourced findings as unverified tool results", async () => {
+    const page = { url: "https://example.com/fees", title: "App fees guide" };
+    const server = fakeServer(2, (step) => {
+      if (step.kind !== "research") return null;
+      const base = { finding: `Finding ${step.task + 1} from the web.`, headline: "Fees", detail: "Per order", kind: "fact" as const };
+      if (step.task === 1) return { ok: true, kind: "research", usage, result: { ...base, sources: [], searchNote: "the web search found nothing usable" } };
+      return { ok: true, kind: "research", usage, result: { ...base, sources: step.task === 0 ? [page, { url: "https://b.example.org/", title: "B" }] : [page] } };
+    });
+    const { session } = setup(server, 40, { ...PLANNED, webSearch: true });
+    await play(session, server, 120, (s) => s.run.live?.phase === "answered");
+    const events = cycleEvents(session);
+    const started = events.filter((event) => event.type === "tool_started");
+    expect(started.map((event) => event.type === "tool_started" && `${event.agentId}:${event.tool}`).sort()).toEqual(["orion:web_search", "sage:web_search", "vex:web_search"]);
+    expect(events.filter((event) => event.type === "tool_completed")).toHaveLength(2);
+    expect(events.find((event) => event.type === "tool_failed")).toMatchObject({ reason: "the web search found nothing usable" });
+    expect(events.filter((event) => event.type === "sources_checked").map((event) => event.type === "sources_checked" && event.total).sort()).toEqual([1, 2]);
+
+    const record = ws(session);
+    expect(Object.fromEntries(record.toolCalls.map((call) => [call.agentId, call.status]))).toEqual({ orion: "succeeded", sage: "failed", vex: "succeeded" });
+    expect(record.cost.toolCalls).toBe(3);
+    const first = record.evidence.find((item) => item.statement === "Finding 1 from the web.")!;
+    expect(first.source).toEqual({ kind: "tool", label: "Web search, summarized by AI: App fees guide", url: page.url, verified: false });
+    expect(record.evidence.find((item) => item.statement === "Finding 2 from the web.")!.source).toMatchObject({ kind: "model", label: AI_KNOWLEDGE_LABEL });
+    expect(record.evidence.every((item) => item.source.kind === "user" || !item.source.verified)).toBe(true);
+    expect(session.world.modules[record.moduleOrder[0]!]!.evidence).toBe(2);
+  });
+
   it("researches, challenges and answers, as many at once as allowed, then everyone goes home", async () => {
     const { session, server } = setup();
     let maxWorking = 0;
@@ -131,7 +158,10 @@ describe("live question: the team works", () => {
     const record = ws(session);
     expect(record.evidence).toHaveLength(5);
     const model = record.evidence.filter((item) => item.foundBy !== "user");
-    for (const item of model) expect(item.source).toEqual({ kind: "model", label: AI_KNOWLEDGE_LABEL, verified: false });
+    for (const item of model) {
+      const label = item.statement.startsWith("Finding") ? AI_KNOWLEDGE_LABEL : AI_SUMMARY_LABEL;
+      expect(item.source).toEqual({ kind: "model", label, verified: false });
+    }
     expect(model.map((item) => item.foundBy).sort()).toEqual(["orion", "sage", "sage", "vex"]);
     const yours = record.evidence.find((item) => item.foundBy === "user")!;
     expect(yours).toMatchObject({ statement: "How many extra orders a day can the kitchen handle: 40 orders.", source: { kind: "user", verified: true } });

@@ -17,7 +17,7 @@ interface ChatReply {
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
-function statusReason(status: number): string {
+export function statusReason(status: number): string {
   if (status === 401 || status === 403) return "the AI service refused the key";
   if (status === 429) return "the AI service is busy or out of credit";
   if (status >= 500) return "the AI service is having problems";

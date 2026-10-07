@@ -4,7 +4,7 @@
 Phases 17–26 — the remaining phases, built one after another in a single run (authorized 2026-10-07: "can you do the left at one time pls carfully"); each is validated and committed separately, and the visual checks are gathered for the user at the end
 
 ## Status
-In progress — Phases 17 and 18 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In progress — Phases 17, 18 and 20 are implemented and validated, awaiting the end-of-run visual review. The user visually approved Phase 16 on 2026-10-07. The user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -33,6 +33,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 16 — Human-in-loop controls (visually approved 2026-10-07).
 - Phase 17 — Possibility Engine (implemented; awaiting the end-of-run visual review).
 - Phase 18 — Cinematic camera director (implemented; awaiting the end-of-run visual review).
+- Phase 20 — Research tools (implemented and validated).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -185,6 +186,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - `src/visualization/world/sim/camera-director.ts` picks a shot from real events only: the question arriving (push toward the Core), the plan (a wider view), the first agent setting off for a station (follow it for 3 s), a later reshuffle (pull back), Vex sending work back (frame Vex and the researcher), the paths appearing or shifting (close on the Possibility Engine), a camera focus operation, and the final answer (center on the Core, held). Routine work never moves the camera. A stronger moment cuts in on a weaker one; the same shot is extended rather than restarted; no new shot starts while a question panel is open.
   - The camera only slides and zooms along its usual viewing angle (no orbiting swings), settling in about a second and a half. Dragging or zooming hands the camera to the user for 8 s after they let go. Picking an agent still gives its portrait view. A "Camera: auto / still" button turns the director off; with reduced motion it is off and the button is hidden.
   - No new dependency.
+- 2026-10-07, Phase 20 (research tools, user choice: OpenAI's built-in web search with the existing key, cap raised to USD 0.10):
+  - A generic tool interface in `src/server/tools/types.ts` (name, description, input and output schemas, execute); `runTool` validates both sides, and tools report model calls, paid tool calls and cost, never throwing. The web search (`tools/web-search.ts`) calls OpenAI's Responses API with its `web_search` tool, required, and returns plain notes plus at most five http(s) pages (tracking parameters removed). The pages come from the search's own citations and result list, not from text the model wrote.
+  - Each research step searches first, then writes the finding from the notes in a second, structured call; the researcher cites pages by key (`s1`…), and only pages the search returned are kept. If the search fails, the step falls back to general knowledge and says why (`searchNote`). A re-check reuses the same notes, with no new search. Other steps see findings marked `[web: site]` or `[general knowledge]`.
+  - Trust: a sourced finding is recorded as `{ kind: "tool", label: "Web search, summarized by AI: <page title>", url, verified: false }` — the AI's summary of real pages, not a checked fact. Unsourced findings keep the general-knowledge label; Sage's combined view and Vex's doubt are labelled "AI summary of the team's findings". Nothing the AI writes is ever verified.
+  - Limits: a research step with a search reserves two model calls against the limit of 30; the hard stop is USD 0.10 (a question with five searches cost about USD 0.07). `MORPH_WEB_SEARCH=off` turns searching off. The search's fee is estimated at USD 0.01 per search plus the pages' text as input tokens.
+  - In the world: the browser publishes `tool_started`/`tool_completed`/`tool_failed` around each search (the plan reply says whether the server searches), and `sources_checked` fills the station's source markers with the number of real pages. The record keeps each tool call and counts them in `cost.toolCalls`. The info panel shows a small link to each sourced finding's site and reads "web pages summarized by AI, not checked"; the answer card says "partly from web pages, summarized by AI" when the answer rests on a sourced finding.
+  - The specification's other suggested tools (calculator, structured compare) are not built: nothing in the current flow would call them yet, so they would be unused code. They fit the same interface later.
+  - No new dependency.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -326,6 +335,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Real model (bakery question): after the review, the station rose and Lume weighed three paths ("Pause and replan", "Small pilot", "Launch broadly"); the answer took the top one. About USD 0.003 and 9 calls; no console errors.
   - Found and fixed: the branches were small (enlarged); the side panel's title wrapped in live mode (shortened).
   - Previews: `p17-demo-paths-forming.png`, `p17-demo-paths.png`, `p17-live-paths.png`.
+- Phase 20 research tools pass (2026-10-07):
+  - Typecheck, lint with zero warnings and tests pass: 179 in 23 files. New tests:
+    - the web search tool: request shape, plain notes, page list cleaned, de-duplicated, http(s) only and capped at five, cost including the search fee, failures without the key, invalid input refused before any request;
+    - the research step: searches first, keeps only cited pages the search returned, falls back to general knowledge with the reason, marks web findings for the team, and re-checks against the same notes;
+    - the server: the plan reports search, a search step counts as two calls, notes are kept for the re-check, and a search step is refused when it would pass the call limit;
+    - the browser: tool events per search, source markers filled with the real page count, tool calls recorded, sourced findings recorded as unverified tool results.
+  - Production build passes; neither key appears in `.next/static`; `.env.local` is still git-ignored.
+  - Live run in Chrome at 1440×900 (the bakery-in-Cairo question, answering both of Nova's questions): five searches at about USD 0.013 each, 16 model calls, about USD 0.068 in total, no errors. Findings cite real pages (for example talabat.com) and the answer card says it is partly from web pages. Previews: `p20-live-research.png`, `p20-live-answer.png`.
 - Phase 18 camera director pass (2026-10-07):
   - Typecheck, lint with zero warnings and tests pass: 168 in 22 files. New test: the demo's shots are exactly the Core push, the hand-out, following the first agent, the reshuffle, Vex's send-back, the paths and the answer, in that order; none starts while the question is open; a shot is active less than 60% of the time; the run ends centered on the answer.
   - Chrome at 1440×900: each shot checked at 3, 10, 15, 27, 40, 47, 52 and 62 s; the question panel stays put; 60 FPS. A drag at 44 s kept the user's view for 8 s before the camera eased back; the toggle switches to "Camera: still".
@@ -351,7 +368,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - When the planner asks for a number in a unit like "months", the control has no upper limit the user can see; the panel shows only the unit.
 - The demo's slider only offers three budgets; any other amount is refused, because each budget has its own scripted ending.
 - In live mode, an answer that fails to reach the server is kept on screen and noted ("Your answer didn't reach the team"), and the answer goes on without it.
-- Live findings are the model's general knowledge, not research: there are no search or source tools yet (Phase 20). They are labelled and never verified. The user's own answers to Nova are recorded as the user's evidence, not as research.
+- Live findings rest on a web search when it works, but they are still the AI's summary of the pages: nothing checks that a page says exactly what the finding says. They are labelled and never verified. A finding keeps one link (the first page it cites). The user's own answers to Nova are recorded as the user's evidence, not as research.
 - Each question's record lives in one server process's memory: a restart, or a second server instance, forgets it, and the next step gets "this question has expired; ask it again" (shared storage would come with hosting, Phase 26).
 - An agent with two tasks in one plan isn't possible (the planner tidies it away), so the scheduler doesn't handle one agent at two stations.
 - Once answered, live mode stays on screen; "Back to demo" or a new question leaves it.
@@ -409,12 +426,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Dependencies: none added since Phase 9; production audit clean. Performance: 60 FPS with the new branches and camera moves. Secrets: neither key in the build (checked in Phase 16; re-checked at the next build). Demo leakage: the demo makes no network or model calls (tested). Logging: the server logs only step names, failure reasons and call counts, never the question or answers.
 
 ## Deferred Decisions
-- Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05). Phase 18: camera style. Phase 20: search provider.
+- Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05); USD 0.10 since Phase 20. Phase 18 camera style and Phase 20 search provider: decided 2026-10-07 (gentle; OpenAI web search).
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 20 — Research tools (authorized as part of the single run; Phase 19 was done earlier). The next architecture audit is due after about Phase 18.
+Phase 21 — Explainability (authorized as part of the single run). The next architecture audit is due after about Phase 22.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
