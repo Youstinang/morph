@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 15 — Collaboration, handoff, failure and retry visuals (authorized 2026-10-07: "remove any limitation and go for phase 15"); awaiting visual approval
+Phase 15 — Collaboration, handoff, failure and retry visuals (authorized 2026-10-07: "remove any limitation and go for phase 15"); complete, visually approved 2026-10-07
 
 ## Status
-Phase 15 is implemented and validated, and waits for the user's visual approval (approve, revise or compare). Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — the user visually approved Phase 15 on 2026-10-07. Phase 14 is implemented and validated (it has no visual checkpoint of its own; Phase 15 reviews how collaboration, handoffs, failures and retries look). Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -29,7 +29,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 19 (moved forward) — Objective planner / real AI provider: "Ask a question" on `/lab` plans the user's own question with a real model and acts the plan out on the deck.
 - Phase 13 — Deterministic demo runtime: the run controller, demo runtime and live question run live in `src/orchestration` on a fixed-step clock; the 3D world attaches to the run.
 - Phase 14 — Agent orchestration: after planning, live questions continue. Agents work their tasks two at a time with model calls, Vex challenges the weakest point, and Lume and Nova give a labelled tentative answer, all within per-question limits enforced by the server.
-- Phase 15 — Collaboration, handoff, failure and retry visuals (implemented and validated; awaiting visual approval).
+- Phase 15 — Collaboration, handoff, failure and retry visuals (visually approved 2026-10-07).
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -351,7 +351,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-None until the user visually approves Phase 15 (approve, revise or compare). After approval: Phase 16 — Human-in-loop controls, once the user authorizes it, preceded by the audit due after Phases 13–15.
+Phase 16 — Human-in-loop controls, once the user authorizes it, preceded by the audit due after Phases 13–15.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
