@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useRef, type RefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   AdditiveBlending,
   CanvasTexture,
@@ -14,12 +14,14 @@ import {
   type Group,
   type Mesh,
 } from "three";
-import { ZONES } from "../sim/roster";
-import type { ScenarioWeights, World, ZoneId } from "../sim/types";
-import { SCENARIO_LABELS, type ZoneHeadline } from "../sim/script";
-import { scenarioWeights, zoneHeadline } from "../sim/world";
+import { DISSOLVE_SECONDS, MATERIALIZE_SECONDS, moduleScale } from "../sim/modules";
+import type { ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
+import { SCENARIO_LABELS, type ModuleHeadline } from "../sim/script";
+import { moduleHeadline, scenarioWeights } from "../sim/world";
 import { geo } from "./geometry";
-import { preloadStationModels, STATION_SHAPES, ZONE_STATIONS, ZoneStation } from "./zone-station";
+import { Bay, CoreTrack, ServiceArm, isPresent } from "./module-fixtures";
+import { BAY_OFFSET, type StationMaterials } from "./station-layout";
+import { preloadStationModels, STATION_SHAPES, ZoneStation } from "./zone-station";
 
 preloadStationModels();
 
@@ -48,7 +50,7 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): 
 }
 
 /** The zone's name plus, once the team has learned something there, a plain headline. */
-function drawPanel(canvas: HTMLCanvasElement, title: string, color: string, finding: ZoneHeadline | null) {
+function drawPanel(canvas: HTMLCanvasElement, title: string, color: string, finding: ModuleHeadline | null) {
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, PANEL_W, PANEL_H);
   const gradient = ctx.createLinearGradient(0, 0, 0, PANEL_H);
@@ -117,34 +119,59 @@ function BranchLabel({ text, index }: { text: string; index: number }) {
   return <sprite material={material} scale={[1.9, 0.36, 1]} position={[0, 1, 0]} renderOrder={10 + index} />;
 }
 
-interface ZoneProps {
-  id: ZoneId;
-  worldRef: RefObject<World>;
+interface ModuleEntry {
+  key: string;
+  id: ModuleId;
+  spec: ModuleSpec;
+  start: Vec2;
+  startSize: number;
+  startCrowd: number;
+  bayIndex: number;
 }
 
-export function Zone({ id, worldRef }: ZoneProps) {
-  const profile = ZONES[id];
-  const [x, z] = profile.position;
-  const facing = Math.atan2(-x, -z);
-  const station = ZONE_STATIONS[id];
+interface ModuleRigProps {
+  entry: ModuleEntry;
+  worldRef: RefObject<World>;
+  m: StationMaterials;
+}
+
+/**
+ * One spatial module: its workstation, live panel, evidence shards and optional scenario branches, plus the
+ * bay, service arm and Core track that belong to it. The rig glides to wherever the layout places it.
+ */
+function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
+  const { id, spec, start } = entry;
+  const station = spec.station === "platform" ? null : spec.station;
   const top = station ? STATION_SHAPES[station].top : 0;
   const panelY = station ? top + 1.05 : 1.75;
   const panelZ = station ? -0.9 : -0.55;
   const shardLift = station ? top - 0.2 : 0;
 
+  const rig = useRef<Group>(null);
+  const fixtures = useRef<Group>(null);
   const group = useRef<Group>(null);
   const column = useRef<Mesh>(null);
   const panel = useRef<Group>(null);
   const shards = useRef<Group>(null);
   const branches = useRef<Group>(null);
-  const state = useRef({ scale: 0, activity: 0, headline: null as ZoneHeadline | null });
+  const distance = useRef(Math.hypot(start[0], start[1]));
+  const state = useRef({
+    x: start[0],
+    z: start[1],
+    scale: 0,
+    size: entry.startSize,
+    crowd: entry.startCrowd,
+    fold: 0,
+    activity: 0,
+    headline: null as ModuleHeadline | null,
+  });
   const viewer = useRef(new Vector3());
 
   const resources = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = PANEL_W;
     canvas.height = PANEL_H;
-    drawPanel(canvas, profile.title, profile.color, null);
+    drawPanel(canvas, spec.title, spec.color, null);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = 4;
@@ -158,14 +185,14 @@ export function Zone({ id, worldRef }: ZoneProps) {
         toneMapped: false,
       }),
       edge: new MeshStandardMaterial({
-        color: profile.color,
-        emissive: new Color(profile.color),
+        color: spec.color,
+        emissive: new Color(spec.color),
         emissiveIntensity: 1.2,
         toneMapped: false,
       }),
       platform: new MeshStandardMaterial({ color: "#151a21", roughness: 0.35, metalness: 0.8 }),
       column: new MeshBasicMaterial({
-        color: profile.color,
+        color: spec.color,
         transparent: true,
         opacity: 0,
         blending: AdditiveBlending,
@@ -174,7 +201,7 @@ export function Zone({ id, worldRef }: ZoneProps) {
         toneMapped: false,
       }),
     };
-  }, [profile.color, profile.title]);
+  }, [spec.color, spec.title]);
 
   useEffect(
     () => () => {
@@ -189,49 +216,73 @@ export function Zone({ id, worldRef }: ZoneProps) {
 
   useFrame((frame, delta) => {
     const world = worldRef.current;
-    const zone = world.zones[id];
+    const mod = world.modules[id];
     const s = state.current;
     const dt = Math.min(delta, 0.05);
     const t = frame.clock.elapsedTime;
-    if (!group.current) return;
+    if (!rig.current || !group.current) return;
+    if (!mod) {
+      rig.current.visible = false;
+      return;
+    }
 
-    const age = world.time - zone.appearedAt;
-    const target = zone.visible ? MathUtils.smoothstep(age, 0, 1.3) : 0;
-    s.scale = zone.visible ? target : MathUtils.damp(s.scale, 0, 6, dt);
+    s.x = MathUtils.damp(s.x, mod.position[0], 2.2, dt);
+    s.z = MathUtils.damp(s.z, mod.position[1], 2.2, dt);
+    distance.current = Math.hypot(s.x, s.z);
+    rig.current.visible = true;
+    rig.current.position.set(s.x, 0, s.z);
+    rig.current.rotation.y = Math.atan2(-s.x, -s.z);
+
+    const age = world.time - mod.appearedAt;
+    const dissolving = mod.removedAt !== null;
+    if (!mod.visible) s.scale = 0;
+    else if (dissolving) s.scale = 1 - MathUtils.smoothstep(world.time - mod.removedAt!, 0, DISSOLVE_SECONDS);
+    else s.scale = Math.max(s.scale, MathUtils.smoothstep(age, 0, MATERIALIZE_SECONDS));
+    s.size = MathUtils.damp(s.size, moduleScale(mod) * mod.layoutScale, 3, dt);
+    s.fold = MathUtils.damp(s.fold, mod.collapsed ? 1 : 0, 4, dt);
+    s.crowd = MathUtils.damp(s.crowd, mod.layoutScale, 3, dt);
+    fixtures.current?.scale.setScalar(s.crowd);
     const eased = s.scale < 1 ? 1 - (1 - s.scale) ** 3 : 1;
+    const size = eased * s.size;
     group.current.visible = s.scale > 0.002;
-    group.current.scale.set(eased, Math.max(eased, 0.001), eased);
+    group.current.scale.set(size, Math.max(size, 0.001), size);
 
     if (column.current) {
-      const flash = zone.visible ? Math.max(0, 1 - age / 1.6) : 0;
+      const since = dissolving ? world.time - mod.removedAt! : age;
+      const flash = mod.visible ? Math.max(0, 1 - since / 1.6) : 0;
       resources.column.opacity = flash * 0.55;
       column.current.visible = flash > 0.01;
       column.current.scale.set(1 + (1 - flash) * 0.6, 1, 1 + (1 - flash) * 0.6);
     }
 
-    const headline = zoneHeadline(world, id);
+    const headline = moduleHeadline(world, id);
     if (headline !== s.headline) {
       s.headline = headline;
-      drawPanel(resources.texture.image as HTMLCanvasElement, profile.title, profile.color, headline);
+      drawPanel(resources.texture.image as HTMLCanvasElement, spec.title, spec.color, headline);
       resources.texture.needsUpdate = true;
     }
 
-    s.activity = MathUtils.damp(s.activity, Math.min(zone.activity, 2), 4, dt);
-    resources.edge.emissiveIntensity = 0.9 + s.activity * 1.4 + Math.sin(t * 4) * 0.15 * s.activity;
-    resources.panel.opacity = 0.82 + s.activity * 0.12;
-    if (panel.current) panel.current.position.y = panelY + Math.sin(t * 0.8 + x) * 0.04;
+    const emphasis = mod.emphasis === "emphasized" ? 0.8 : mod.emphasis === "muted" ? -0.5 : 0;
+    s.activity = MathUtils.damp(s.activity, Math.min(mod.activity, 2), 4, dt);
+    resources.edge.emissiveIntensity = Math.max(0.3, 0.9 + emphasis + s.activity * 1.4 + Math.sin(t * 4) * 0.15 * s.activity);
+    resources.panel.opacity = (0.82 + s.activity * 0.12) * (mod.emphasis === "muted" ? 0.6 : 1) * (1 - s.fold);
+    if (panel.current) {
+      panel.current.visible = s.fold < 0.98;
+      panel.current.position.y = panelY + Math.sin(t * 0.8 + s.x) * 0.04;
+      panel.current.scale.setScalar(Math.max(0.001, 1 - s.fold));
+    }
 
     if (shards.current) {
       shards.current.rotation.y += dt * (0.25 + s.activity * 0.6);
       shards.current.children.forEach((child, i) => {
-        child.visible = i < zone.evidence;
+        child.visible = i < mod.evidence;
         child.position.y = 0.5 + Math.sin(t * 1.3 + i) * 0.08 + (i % 3) * 0.18;
         child.rotation.x += dt * 1.2;
       });
     }
 
     if (branches.current) {
-      const weights = scenarioWeights(world);
+      const weights = isPresent(mod) && !mod.collapsed ? scenarioWeights(world) : null;
       branches.current.visible = weights !== null;
       if (weights && branches.current.parent) {
         const eye = branches.current.parent.worldToLocal(viewer.current.copy(frame.camera.position));
@@ -256,7 +307,12 @@ export function Zone({ id, worldRef }: ZoneProps) {
   });
 
   return (
-    <group position={[x, 0, z]} rotation={[0, facing, 0]}>
+    <group ref={rig} position={[start[0], 0, start[1]]}>
+      <CoreTrack id={id} spec={spec} worldRef={worldRef} distance={distance} />
+      <group ref={fixtures} position={[0, 0, -BAY_OFFSET]} scale={entry.startCrowd}>
+        <Bay id={id} spec={spec} index={entry.bayIndex} worldRef={worldRef} m={m} />
+        <ServiceArm id={id} spec={spec} worldRef={worldRef} m={m} />
+      </group>
       <mesh ref={column} position={[0, 3, 0]} material={resources.column} geometry={geo.tube(1.4, 1.6, 6)} />
       <group ref={group}>
         {station ? (
@@ -285,7 +341,7 @@ export function Zone({ id, worldRef }: ZoneProps) {
             );
           })}
         </group>
-        {id === "possibility" && (
+        {spec.surface === "scenarios" && (
           <group ref={branches} position={[0, 0.15, 0.2]} visible={false}>
             {SCENARIOS.map((scenario, i) => (
               <group key={scenario.key} rotation={[0, 0, scenario.angle]}>
@@ -297,6 +353,44 @@ export function Zone({ id, worldRef }: ZoneProps) {
           </group>
         )}
       </group>
+    </group>
+  );
+}
+
+/** Mounts a rig for every module in the world, following creation and removal as they happen. */
+export function Modules({ worldRef, m }: { worldRef: RefObject<World>; m: StationMaterials }) {
+  const [entries, setEntries] = useState<ModuleEntry[]>([]);
+  const seen = useRef<{ world: World | null; version: number }>({ world: null, version: -1 });
+  useFrame(() => {
+    const world = worldRef.current;
+    const last = seen.current;
+    if (last.world === world && last.version === world.layoutVersion) return;
+    last.world = world;
+    last.version = world.layoutVersion;
+    setEntries((current) => {
+      const keys = world.moduleOrder.map((id) => `${world.cycle}:${id}`);
+      if (keys.join("|") === current.map((entry) => entry.key).join("|")) return current;
+      return world.moduleOrder.map((id, index) => {
+        const existing = current.find((entry) => entry.key === keys[index]);
+        if (existing) return existing;
+        const mod = world.modules[id]!;
+        return {
+          key: keys[index]!,
+          id,
+          spec: mod.spec,
+          start: mod.position,
+          startSize: moduleScale(mod) * mod.layoutScale,
+          startCrowd: mod.layoutScale,
+          bayIndex: index,
+        };
+      });
+    });
+  });
+  return (
+    <group>
+      {entries.map((entry) => (
+        <ModuleRig key={entry.key} entry={entry} worldRef={worldRef} m={m} />
+      ))}
     </group>
   );
 }

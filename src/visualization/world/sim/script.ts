@@ -1,4 +1,4 @@
-import type { Action, AgentId, ScenarioWeights, ZoneId } from "./types";
+import type { Action, AgentId, ModuleChange, ModuleId, ModuleSpec, ScenarioWeights } from "./types";
 
 export const OBJECTIVE =
   "Should a European AI software company enter the UAE market?";
@@ -143,14 +143,45 @@ export const FINDINGS: readonly Finding[] = [
   { signal: "shift", kind: "conclusion", text: "A local partner fits the budget and the slow buying cycle best." },
 ];
 
-export interface ZoneHeadline {
+export interface ModuleHeadline {
   signal: string;
   headline: string;
   detail: string;
 }
 
+type DemoModule = "market" | "competition" | "regulation" | "economics" | "risk" | "possibility";
+
+export const MODULE_CATALOG: Record<DemoModule, ModuleSpec> = {
+  market: { id: "market", title: "Market demand", group: "research", station: "console", surface: "panel", color: "#8fd0ff" },
+  competition: { id: "competition", title: "Competitors", group: "research", station: "table", surface: "panel", color: "#8fd0ff" },
+  regulation: { id: "regulation", title: "Rules", group: "research", station: "console", surface: "panel", color: "#8fd0ff" },
+  economics: { id: "economics", title: "Costs", group: "analysis", station: "hologram", surface: "panel", color: "#ffc27a" },
+  risk: { id: "risk", title: "Risks", group: "analysis", station: "table", surface: "panel", color: "#ff8f6b" },
+  possibility: { id: "possibility", title: "Options", group: "decision", station: "platform", surface: "scenarios", color: "#b98cff" },
+};
+
+/**
+ * How the deck changes as the story unfolds. Nova's plan opens the three research areas; the discovery
+ * reserves slots for the areas Brix will build, which then materialize as each one is set up.
+ */
+export const MODULE_CHANGES: Record<string, readonly ModuleChange[]> = {
+  plan: [
+    { op: "create", spec: MODULE_CATALOG.market },
+    { op: "create", spec: MODULE_CATALOG.competition },
+    { op: "create", spec: MODULE_CATALOG.regulation },
+  ],
+  discovery: [
+    { op: "create", spec: MODULE_CATALOG.economics, visible: false },
+    { op: "create", spec: MODULE_CATALOG.risk, visible: false },
+    { op: "create", spec: MODULE_CATALOG.possibility, visible: false },
+  ],
+  "zone:economics": [{ op: "reveal", id: "economics" }],
+  "zone:risk": [{ op: "reveal", id: "risk" }],
+  "zone:possibility": [{ op: "reveal", id: "possibility" }],
+};
+
 /** What each station's floating panel says; the latest fired signal wins. */
-export const ZONE_HEADLINES: Record<ZoneId, readonly ZoneHeadline[]> = {
+export const MODULE_HEADLINES: Record<ModuleId, readonly ModuleHeadline[]> = {
   market: [
     { signal: "pkg-market", headline: "Demand is growing", detail: "UAE companies are buying AI software" },
     { signal: "retry-done", headline: "Buying takes 9–12 months", detail: "Confirmed with 2 more sources" },

@@ -1,4 +1,4 @@
-import type { AgentId, Vec2, ZoneId } from "./types";
+import type { AgentId, Vec2 } from "./types";
 
 export type HairStyle = "bob" | "spiky" | "braid" | "topknot" | "hood" | "bun";
 export type PropKind = "orb" | "tablet" | "chart" | "gauntlet" | "blade" | "sphere";
@@ -192,31 +192,6 @@ export const AGENTS: Record<AgentId, AgentProfile> = {
   },
 };
 
-export interface ZoneProfile {
-  id: ZoneId;
-  title: string;
-  position: Vec2;
-  color: string;
-}
-
-export const ZONE_ORDER: readonly ZoneId[] = [
-  "market",
-  "competition",
-  "regulation",
-  "economics",
-  "risk",
-  "possibility",
-];
-
-export const ZONES: Record<ZoneId, ZoneProfile> = {
-  market: { id: "market", title: "Market demand", position: [-8.6, -2.6], color: "#8fd0ff" },
-  competition: { id: "competition", title: "Competitors", position: [-5.2, -8.4], color: "#8fd0ff" },
-  regulation: { id: "regulation", title: "Rules", position: [1, -10.2], color: "#8fd0ff" },
-  economics: { id: "economics", title: "Costs", position: [6.8, -7.6], color: "#ffc27a" },
-  risk: { id: "risk", title: "Risks", position: [10, -3.6], color: "#ff8f6b" },
-  possibility: { id: "possibility", title: "Options", position: [7.4, 2.6], color: "#b98cff" },
-};
-
 export const CORE_RADIUS = 2.4;
 export const HOME_RADIUS = 3.6;
 
@@ -230,13 +205,4 @@ export function coreSpot(id: AgentId): Vec2 {
   const index = AGENT_ORDER.indexOf(id);
   const angle = ((-50 + index * 20) * Math.PI) / 180;
   return [2.3 * Math.sin(angle), 2.3 * Math.cos(angle)];
-}
-
-export function zoneSpot(zone: ZoneId, id: AgentId): Vec2 {
-  const [zx, zz] = ZONES[zone].position;
-  const length = Math.hypot(zx, zz);
-  const nx = -zx / length;
-  const nz = -zz / length;
-  const slot = (AGENT_ORDER.indexOf(id) % 3) - 1;
-  return [zx + nx * 2.1 + -nz * slot * 0.95, zz + nz * 2.1 + nx * slot * 0.95];
 }

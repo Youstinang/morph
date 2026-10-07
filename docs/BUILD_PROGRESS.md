@@ -4,7 +4,7 @@
 Phase 8 — Spatial modules (authorized 2026-10-07: "okay now we move with the plan")
 
 ## Status
-Planning — waiting on the user's layout-metaphor decision before implementation. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+In Progress — implemented and validated; awaiting the user's visual approval. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -74,6 +74,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - 2026-10-07: the user said text cards still hid characters and stations, and asked that they sit in empty space.
   - The HUD now uses fixed lanes, and the camera frames the world in the remaining free area at every screen size (see `VISUAL_SYSTEM.md`).
   - The answer card's confidence note moved into its label.
+- 2026-10-07, Phase 8: the user chose the **grouped neighborhoods** layout (research / analysis / decision) over an even ring or fixed docking bays.
+  - Zones became configured spatial modules with create, reserve and reveal, remove (with a dissolve), emphasize and mute, collapse and expand, and resize. Status is derived: reserved, materializing, active, idle, collapsed or dissolving.
+  - The layout engine is deterministic: neighborhoods centred on anchors, move outward first, then shrink, and never overlap. Details are in `VISUAL_SYSTEM.md`, Adaptive analysis zones.
+  - `ZoneId`, `ZONES` and `ZONE_ORDER` were removed. Module ids are open strings, and the demo catalog, story-driven module changes and panel headlines live in `sim/script.ts`.
+  - Bays, service arms and Core light-tracks moved out of the static station into each module's rig. The cargo pod targets live module positions.
+  - `ModuleChange` is the prototype precursor of `MorphOperation`. Phase 11 replaces it with Zod-validated operations through `applyMorphOperation`.
+  - The demo story and timing are unchanged. Its later modules are reserved when the discovery fires, so they open in their final spots.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -125,6 +132,16 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - No HUD card covers a character or station. Cards sit over walls, ceiling or empty floor.
   - On phones the world is small, because the deck's width limits the zoom.
   - Previews: `clear-1440-44s.png`, `clear-1440-budget-26s.png`, `clear-1440-answer-60s.png`, `clear-1024-44s.png`, `clear-1920-60s.png`, `clear-mobile-44s.png`.
+- Phase 8 spatial modules pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 33 in 5 files, 13 of them new.
+  - New tests cover:
+    - layout: demo modules land within 1.1 units of the approved arc; 300 seeded crowded layouts with mixed size, emphasis and collapse never overlap and keep bays clear of the generators and the wall; capacity; adding a module moves only its neighborhood; crowding grows the radius before shrinking;
+    - operations: the full status lifecycle, the gap closing after a dissolve, re-layout on emphasis and resize with size clamping, unknown and duplicate changes ignored, and agent work spots;
+    - story: modules created only by the plan or the builder, every scripted module present in the catalog, agents only sent to existing modules, demo positions stable through the run, and every module dissolved before the loop.
+  - Chrome at 1440×900 holds 60 FPS. `/lab` at 16 s, 44 s and 60 s matches the approved clear-world framing, and was also checked at 1024×768 and 390×844.
+  - Checked in the `/dev/modules` sandbox at 60 FPS: the demo set; three modules added, so analysis crowds to 45% and research moves outward; then emphasize, collapse and remove, with the dissolve column and the neighbors re-spacing.
+  - Found and fixed: bays behind crowded modules stayed full size and merged into one wall. Bays and arms now scale with crowding.
+  - Previews: `modules-lab-44s.png`, `modules-lab-60s.png`, `modules-sandbox-demo.png`, `modules-sandbox-crowded.png`, `modules-sandbox-dissolve.png`, `modules-sandbox-after.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: reduced-motion behavior for the 3D scene (no 3D reduced-motion handling yet), Three.js memory over long sessions, and Safari/Firefox.
@@ -146,20 +163,20 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 
 ## Audit 2026-10-07 (after Phases 3–7)
 - High, fixed: the model conversion and rig scripts existed only in `/tmp`. They now live in `tools/models/` with their own exact-pinned `package.json`, isolated from the app's dependencies. Outputs default to git-ignored folders beside the scripts. Lint, typecheck and the 20 tests pass.
-- High, open (needs the user's OK): the project is not under version control, so there is no history or rollback.
+- High, fixed (user approved): the project had no version control. A local git repository was initialized with a baseline commit (`1b55b19`); nothing is pushed. Secrets stay out via `.env*` in `.gitignore`.
 - Medium, scheduled: demo state and story (`src/visualization/world/sim`) live inside the visualization layer, and `src/state`/`src/orchestration` are empty. This is the planned prototype; Phases 9–13 move it into canonical state, events, operations and the demo runtime.
-- Medium, Phase 8: zones are a hardcoded `ZoneId` union with fixed positions in `roster.ts`. The specification requires a configuration-driven, domain-neutral module system.
+- Medium, fixed in Phase 8: zones were a hardcoded `ZoneId` union with fixed positions in `roster.ts`.
 - Medium, open: no reduced-motion handling in the 3D scene; about 17 MB of GLB models load with no progress indication.
 - Low: unused identity fields (`face`, hair and prop) in `roster.ts`, the outdated `/dev/design-system` page, and the missing favicon. Left as is.
 - No findings for secrets, provider leakage or arbitrary code execution: there are no providers or AI calls yet.
 
 ## Deferred Decisions
-- Phase 8: zone layout metaphor (currently a fixed arc). Asked 2026-10-07. Phase 9: store design and state contracts. Phases 10–11: event and operation contracts.
+- Visual approval of Phase 8 (spatial modules), or requested revisions. Phase 9: store design and state contracts. Phases 10–11: event and operation contracts.
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 19: AI provider/model. Phase 20: search provider.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 8 — Spatial modules is authorized and waiting on the layout decision. Phase 9 is not authorized.
+Awaiting the user's visual approval of Phase 8. Once approved, Phase 9 — Workspace domain state (store design decision first) can be authorized. Phase 9 is not authorized yet.
 
 ## Last Updated
-2026-10-07 10:45 (Asia/Dubai)
+2026-10-07 11:20 (Asia/Dubai)

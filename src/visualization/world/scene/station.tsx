@@ -15,10 +15,10 @@ import {
   SRGBColorSpace,
   type Mesh,
 } from "three";
-import { ZONES, ZONE_ORDER } from "../sim/roster";
-import type { World, ZoneId } from "../sim/types";
+import type { World } from "../sim/types";
 import { geo } from "./geometry";
 import { Machinery } from "./station-machinery";
+import { Modules } from "./zone";
 import {
   CENTER_X,
   CENTER_Z,
@@ -29,7 +29,6 @@ import {
   WALL_HEIGHT,
   WALL_RADIUS,
   WALL_TO,
-  bayPlacement,
   faceCenter,
   polar,
   seeded,
@@ -39,7 +38,6 @@ import {
 } from "./station-layout";
 
 const RIBS = 24;
-const TRACK_START = 3.1;
 const EVIDENCE_FOR_FULL_ARCHIVE = 22;
 
 const TOWER_ANGLES = [0.97, 1.12, 1.3, 1.44, 1.58, 1.71, 1.88, 2.03].map((k) => k * Math.PI);
@@ -220,7 +218,7 @@ function Consoles({ m }: { m: StationMaterials }) {
   );
 }
 
-/** Archive towers fill with the total evidence gathered across all zones. */
+/** Archive towers fill with the total evidence gathered across all modules. */
 function ArchiveTowers({ worldRef, m }: { worldRef: RefObject<World>; m: StationMaterials }) {
   const fills = useRef<(Mesh | null)[]>([]);
   const level = useRef(0);
@@ -230,7 +228,7 @@ function ArchiveTowers({ worldRef, m }: { worldRef: RefObject<World>; m: Station
   useFrame((_, delta) => {
     const world = worldRef.current;
     let evidence = 0;
-    for (const id of ZONE_ORDER) evidence += world.zones[id].evidence;
+    for (const id of world.moduleOrder) evidence += world.modules[id]!.evidence;
     level.current = MathUtils.damp(level.current, Math.min(evidence / EVIDENCE_FOR_FULL_ARCHIVE, 1), 2, Math.min(delta, 0.05));
     fills.current.forEach((mesh, i) => {
       if (!mesh) return;
@@ -261,125 +259,6 @@ function ArchiveTowers({ worldRef, m }: { worldRef: RefObject<World>; m: Station
             />
             {[-0.33, 0.33].map((px) => (
               <mesh key={px} geometry={geo.box(0.05, 4.8, 0.02)} material={m.seam} position={[px, 2.9, 0.46]} />
-            ))}
-          </group>
-        );
-      })}
-    </group>
-  );
-}
-
-function drawBayLabel(index: number, title: string, color: string): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#0b1118";
-  ctx.fillRect(0, 0, 512, 64);
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, 8, 64);
-  ctx.font = "600 28px ui-monospace, Menlo, monospace";
-  ctx.fillText(`BAY ${String(index + 1).padStart(2, "0")}`, 26, 42);
-  ctx.fillStyle = "#c9d6e3";
-  ctx.font = "500 26px ui-sans-serif, system-ui, Helvetica, Arial";
-  ctx.fillText(title.toUpperCase(), 170, 42);
-  return canvas;
-}
-
-/** Docking bay behind each zone; doors open when the zone materializes. */
-function Bay({ id, index, worldRef, m }: { id: ZoneId; index: number; worldRef: RefObject<World>; m: StationMaterials }) {
-  const profile = ZONES[id];
-  const { x, z, yaw } = bayPlacement(id);
-
-  const left = useRef<Mesh>(null);
-  const right = useRef<Mesh>(null);
-  const open = useRef(0);
-  const resources = useMemo(() => {
-    const texture = new CanvasTexture(drawBayLabel(index, profile.title, profile.color));
-    texture.colorSpace = SRGBColorSpace;
-    texture.anisotropy = 4;
-    return {
-      texture,
-      label: new MeshBasicMaterial({ map: texture, toneMapped: false }),
-      glow: new MeshBasicMaterial({ color: profile.color, transparent: true, opacity: 0, toneMapped: false }),
-      edge: new MeshBasicMaterial({ color: new Color(profile.color).multiplyScalar(0.55), toneMapped: false }),
-    };
-  }, [index, profile.color, profile.title]);
-  useDisposable(useMemo(() => Object.values(resources), [resources]));
-
-  useFrame((_, delta) => {
-    const zone = worldRef.current.zones[id];
-    open.current = MathUtils.damp(open.current, zone.visible ? 1 : 0, 2.4, Math.min(delta, 0.05));
-    const shift = open.current * 1.15;
-    if (left.current) left.current.position.x = -0.62 - shift;
-    if (right.current) right.current.position.x = 0.62 + shift;
-    resources.glow.opacity = open.current * (0.32 + Math.min(zone.activity, 2) * 0.12);
-  });
-
-  return (
-    <group position={[x, 0, z]} rotation={[0, yaw, 0]}>
-      <mesh geometry={geo.box(3.6, 0.1, 1.6)} material={m.panel} position={[0, 0.05, 0.3]} />
-      <mesh geometry={geo.box(3.2, 0.012, 0.05)} material={resources.edge} position={[0, 0.105, 1.08]} />
-      {[-1.72, 1.72].map((px) => (
-        <group key={px} position={[px, 0, 0]}>
-          <mesh geometry={geo.box(0.36, 4, 0.6)} material={m.hull} position={[0, 2, 0]} />
-          <mesh geometry={geo.box(0.05, 3.2, 0.02)} material={resources.edge} position={[px > 0 ? -0.19 : 0.19, 2, 0.31]} />
-        </group>
-      ))}
-      <mesh geometry={geo.box(3.8, 0.55, 0.7)} material={m.hull} position={[0, 4.2, 0]} />
-      <mesh geometry={geo.plane(2.6, 0.32)} material={resources.label} position={[0, 4.2, 0.36]} />
-      <mesh geometry={geo.plane(3.08, 3.7)} material={resources.glow} position={[0, 1.95, -0.2]} />
-      <mesh ref={left} geometry={geo.box(1.24, 3.7, 0.12)} material={m.panel} position={[-0.62, 1.95, 0]} />
-      <mesh ref={right} geometry={geo.box(1.24, 3.7, 0.12)} material={m.panel} position={[0.62, 1.95, 0]} />
-    </group>
-  );
-}
-
-/** Floor light-tracks from the Core to each zone; lit while the zone exists, brighter while it is worked. */
-function LightTracks({ worldRef }: { worldRef: RefObject<World> }) {
-  const materials = useMemo(
-    () =>
-      Object.fromEntries(
-        ZONE_ORDER.map((id) => [
-          id,
-          new MeshBasicMaterial({
-            color: ZONES[id].color,
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
-            toneMapped: false,
-          }),
-        ]),
-      ) as Record<ZoneId, MeshBasicMaterial>,
-    [],
-  );
-  const groove = useMemo(() => new MeshBasicMaterial({ color: "#121a24", toneMapped: false }), []);
-  useDisposable(useMemo(() => [...Object.values(materials), groove], [materials, groove]));
-
-  useFrame((_, delta) => {
-    const world = worldRef.current;
-    const dt = Math.min(delta, 0.05);
-    for (const id of ZONE_ORDER) {
-      const zone = world.zones[id];
-      const target = zone.visible ? 0.28 + Math.min(zone.activity, 2) * 0.3 : 0;
-      const material = materials[id];
-      material.opacity = MathUtils.damp(material.opacity, target, 3, dt);
-      material.visible = material.opacity > 0.01;
-    }
-  });
-
-  return (
-    <group>
-      {ZONE_ORDER.map((id) => {
-        const [zx, zz] = ZONES[id].position;
-        const length = Math.hypot(zx, zz) - TRACK_START - 2.4;
-        return (
-          <group key={id} rotation={[0, Math.atan2(zx, zz), 0]}>
-            {[-0.34, 0.34].map((px) => (
-              <group key={px} position={[px, 0, TRACK_START + length / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                <mesh geometry={geo.plane(0.14, length)} material={groove} position={[0, 0, 0.004]} />
-                <mesh geometry={geo.plane(0.05, length)} material={materials[id]} position={[0, 0, 0.007]} />
-              </group>
             ))}
           </group>
         );
@@ -603,11 +482,8 @@ export function Station({ worldRef, reflections }: StationProps) {
       <NeonSigns />
       <ArchiveTowers worldRef={worldRef} m={m} />
       <Consoles m={m} />
-      <LightTracks worldRef={worldRef} />
       <Machinery worldRef={worldRef} m={m} />
-      {ZONE_ORDER.map((id, index) => (
-        <Bay key={id} id={id} index={index} worldRef={worldRef} m={m} />
-      ))}
+      <Modules worldRef={worldRef} m={m} />
     </group>
   );
 }

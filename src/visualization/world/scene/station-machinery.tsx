@@ -15,8 +15,7 @@ import {
   type Group,
   type Material,
 } from "three";
-import { ZONES, ZONE_ORDER } from "../sim/roster";
-import type { AgentState, World, ZoneId } from "../sim/types";
+import type { AgentState, ModuleId, World } from "../sim/types";
 import { coreState } from "../sim/world";
 import { geo } from "./geometry";
 import { LOOKS } from "./intent-core";
@@ -27,7 +26,9 @@ import {
   WALL_FROM,
   WALL_RADIUS,
   WALL_TO,
-  bayPlacement,
+  GENERATOR_ANGLES,
+  GENERATOR_RADIUS,
+  bayAngle,
   faceCenter,
   polar,
   useDisposable,
@@ -43,7 +44,6 @@ const RAIL_Y = 7.45;
 const POD_SPEED = 0.7;
 const POD_DWELL = 0.9;
 const LAMP_ANGLES = Array.from({ length: 12 }, (_, i) => Math.PI * (0.96 + (i / 11) * 1.08));
-const GENERATOR_ANGLES = [0.93 * Math.PI, 2.07 * Math.PI];
 const BUSY_STATES: ReadonlySet<AgentState> = new Set(["working", "evaluating", "collaborating", "handoff"]);
 
 interface StationPartProps {
@@ -169,16 +169,12 @@ function CargoRail({ worldRef, m }: StationPartProps) {
   const pivot = useRef<Group>(null);
   const strip = useMemo(() => new MeshBasicMaterial({ color: "#2a3a4c", toneMapped: false }), []);
   useDisposable(useMemo(() => [strip], [strip]));
-  const targets = useMemo(
-    () => Object.fromEntries(ZONE_ORDER.map((id) => [id, bayPlacement(id).angle])) as Record<ZoneId, number>,
-    [],
-  );
   const run = useRef({
     angle: Math.PI * 1.5,
-    queue: [] as ZoneId[],
-    current: null as ZoneId | null,
+    queue: [] as ModuleId[],
+    current: null as ModuleId | null,
     dwell: 0,
-    seen: {} as Partial<Record<ZoneId, number>>,
+    seen: {} as Partial<Record<ModuleId, number>>,
     color: new Color("#2a3a4c"),
     goal: new Color(),
   });
@@ -187,8 +183,8 @@ function CargoRail({ worldRef, m }: StationPartProps) {
     const world = worldRef.current;
     const r = run.current;
     const dt = Math.min(delta, 0.05);
-    for (const id of ZONE_ORDER) {
-      const evidence = world.zones[id].evidence;
+    for (const id of world.moduleOrder) {
+      const evidence = world.modules[id]!.evidence;
       const seen = r.seen[id] ?? 0;
       if (evidence > seen && !r.queue.includes(id) && r.current !== id) r.queue.push(id);
       r.seen[id] = evidence;
@@ -197,8 +193,10 @@ function CargoRail({ worldRef, m }: StationPartProps) {
       r.current = r.queue.shift() ?? null;
       r.dwell = 0;
     }
-    if (r.current) {
-      const target = targets[r.current];
+    const destination = r.current ? world.modules[r.current] : undefined;
+    if (r.current && !destination) r.current = null;
+    if (destination) {
+      const target = bayAngle(destination.position[0], destination.position[1]);
       const gap = target - r.angle;
       const step = POD_SPEED * dt;
       if (Math.abs(gap) > step) {
@@ -208,7 +206,7 @@ function CargoRail({ worldRef, m }: StationPartProps) {
         r.dwell += dt;
         if (r.dwell >= POD_DWELL) r.current = null;
       }
-      r.goal.set(ZONES[r.current ?? "market"].color);
+      r.goal.set(destination.spec.color);
     } else {
       r.goal.set("#2a3a4c");
     }
@@ -279,60 +277,6 @@ function CoreEmitter({ worldRef, m }: StationPartProps) {
   );
 }
 
-/** Service arm beside each bay; folded until its zone exists, then tends the zone while it is worked. */
-function ServiceArm({ id, worldRef, m }: StationPartProps & { id: ZoneId }) {
-  const { x, z, yaw } = bayPlacement(id);
-  const turret = useRef<Group>(null);
-  const shoulder = useRef<Group>(null);
-  const elbow = useRef<Group>(null);
-  const pose = useRef({ turret: 0, shoulder: -0.2, elbow: 2.3, glow: 0 });
-  const tip = useMemo(() => new MeshBasicMaterial({ color: ZONES[id].color, transparent: true, opacity: 0.2, toneMapped: false }), [id]);
-  useDisposable(useMemo(() => [tip], [tip]));
-  const facing = Math.atan2(-2.35, 2.4);
-
-  useFrame((frame, delta) => {
-    const world = worldRef.current;
-    const zone = world.zones[id];
-    const dt = Math.min(delta, 0.05);
-    const t = frame.clock.elapsedTime;
-    const p = pose.current;
-    const activity = Math.min(zone.activity, 2) / 2;
-    const building = zone.visible ? Math.max(0, 1 - (world.time - zone.appearedAt) / 1.8) : 0;
-    const targetTurret = zone.visible ? facing + Math.sin(t * 1.4) * 0.18 * activity : 0;
-    const targetShoulder = zone.visible ? 0.45 + building * 0.35 + Math.sin(t * 1.1) * 0.08 * activity : -0.2;
-    const targetElbow = zone.visible ? 0.95 - building * 0.4 + Math.sin(t * 1.7) * 0.15 * activity : 2.3;
-    p.turret = MathUtils.damp(p.turret, targetTurret, 3, dt);
-    p.shoulder = MathUtils.damp(p.shoulder, targetShoulder, 3, dt);
-    p.elbow = MathUtils.damp(p.elbow, targetElbow, 3, dt);
-    p.glow = MathUtils.damp(p.glow, zone.visible ? 0.35 + activity * 0.65 + building : 0.15, 4, dt);
-    if (turret.current) turret.current.rotation.y = p.turret;
-    if (shoulder.current) shoulder.current.rotation.x = p.shoulder;
-    if (elbow.current) elbow.current.rotation.x = p.elbow;
-    tip.opacity = Math.min(p.glow, 1);
-  });
-
-  return (
-    <group position={[x, 0, z]} rotation={[0, yaw, 0]}>
-      <group position={[2.4, 0, 0.7]}>
-        <mesh geometry={geo.cylinder(0.36, 0.44, 0.3, 16)} material={m.trim} position={[0, 0.15, 0]} />
-        <group ref={turret} position={[0, 0.3, 0]}>
-          <mesh geometry={geo.cylinder(0.24, 0.28, 0.3, 14)} material={m.hull} position={[0, 0.15, 0]} />
-          <group ref={shoulder} position={[0, 0.32, 0]}>
-            <mesh geometry={geo.sphere(0.14, 12)} material={m.trim} />
-            <mesh geometry={geo.box(0.16, 1.3, 0.16)} material={m.panel} position={[0, 0.65, 0]} />
-            <group ref={elbow} position={[0, 1.3, 0]}>
-              <mesh geometry={geo.sphere(0.11, 12)} material={m.trim} />
-              <mesh geometry={geo.box(0.12, 1, 0.12)} material={m.panel} position={[0, 0.5, 0]} />
-              <mesh geometry={geo.box(0.24, 0.16, 0.3)} material={m.hull} position={[0, 1.05, 0]} />
-              <mesh geometry={geo.sphere(0.06, 10)} material={tip} position={[0, 1.15, 0.12]} />
-            </group>
-          </group>
-        </group>
-      </group>
-    </group>
-  );
-}
-
 function Conduits({ m }: { m: StationMaterials }) {
   const arc = WALL_TO - WALL_FROM;
   const boxes = useMemo(() => Array.from({ length: 9 }, (_, i) => WALL_FROM + ((i + 0.5) / 9) * arc), [arc]);
@@ -374,7 +318,7 @@ function Generators({ worldRef, m }: StationPartProps) {
   return (
     <group>
       {GENERATOR_ANGLES.map((angle) => {
-        const [x, z] = polar(15.4, angle);
+        const [x, z] = polar(GENERATOR_RADIUS, angle);
         return (
           <group key={angle} position={[x, 0, z]} rotation={[0, faceCenter(angle), 0]}>
             <mesh geometry={geo.cylinder(1.25, 1.35, 0.3, 28)} material={m.trim} position={[0, 0.15, 0]} />
@@ -400,9 +344,6 @@ export function Machinery({ worldRef, m }: StationPartProps) {
       <HangingLamps m={m} />
       <CargoRail worldRef={worldRef} m={m} />
       <CoreEmitter worldRef={worldRef} m={m} />
-      {ZONE_ORDER.map((id) => (
-        <ServiceArm key={id} id={id} worldRef={worldRef} m={m} />
-      ))}
       <Conduits m={m} />
       <Generators worldRef={worldRef} m={m} />
     </group>

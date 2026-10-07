@@ -6,7 +6,8 @@ import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { useMemo, useRef, type ComponentRef, type RefObject } from "react";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { hudInsets, type HudInsets } from "./hud-layout";
-import { AGENT_ORDER, ZONE_ORDER, ZONES, homePosition } from "./sim/roster";
+import { sectorFramePoints } from "./sim/layout";
+import { AGENT_ORDER, homePosition } from "./sim/roster";
 import type { AgentId, World } from "./sim/types";
 import { stepWorld } from "./sim/world";
 import { Artifacts } from "./scene/artifacts";
@@ -15,7 +16,6 @@ import { Character } from "./scene/character";
 import { IntentCore } from "./scene/intent-core";
 import { Station } from "./scene/station";
 import { TagProjector } from "./scene/tag-projector";
-import { Zone } from "./scene/zone";
 import type { TagRegistry } from "./agent-tags";
 
 const FIXED_STEP = 1 / 60;
@@ -62,18 +62,19 @@ function SimulationDriver({ worldRef, paused, speed, onSnapshot }: DriverProps) 
   return null;
 }
 
-/** Points that must stay visible in the overview: every zone's footprint and top, the Core, and agent homes. */
-const FIT_POINTS: Vector3[] = [
-  ...ZONE_ORDER.flatMap((id) => {
-    const [x, z] = ZONES[id].position;
-    return [
-      new Vector3(x - ZONE_REACH, 0, z),
-      new Vector3(x + ZONE_REACH, 0, z),
-      new Vector3(x, 0, z - ZONE_REACH),
-      new Vector3(x, 0, z + ZONE_REACH),
-      new Vector3(x, ZONE_TOP, z),
-    ];
-  }),
+function moduleFitPoints(x: number, z: number): Vector3[] {
+  return [
+    new Vector3(x - ZONE_REACH, 0, z),
+    new Vector3(x + ZONE_REACH, 0, z),
+    new Vector3(x, 0, z - ZONE_REACH),
+    new Vector3(x, 0, z + ZONE_REACH),
+    new Vector3(x, ZONE_TOP, z),
+  ];
+}
+
+/** Always in the overview: each deck neighborhood's framed arc, the Core, and agent homes. */
+const BASE_FIT_POINTS: Vector3[] = [
+  ...sectorFramePoints().flatMap(([x, z]) => moduleFitPoints(x, z)),
   new Vector3(0, 0, 0),
   new Vector3(0, CORE_TOP, 0),
   ...AGENT_ORDER.flatMap((id) => {
@@ -81,6 +82,18 @@ const FIT_POINTS: Vector3[] = [
     return [new Vector3(x, 0, z), new Vector3(x, AGENT_TOP, z)];
   }),
 ];
+
+/** The base points plus any module the layout has pushed beyond the framed arcs. */
+function fitPoints(world: World): { points: Vector3[]; key: string } {
+  const points = [...BASE_FIT_POINTS];
+  const key: string[] = [];
+  for (const id of world.moduleOrder) {
+    const [x, z] = world.modules[id]!.position;
+    points.push(...moduleFitPoints(x, z));
+    key.push(`${x.toFixed(1)},${z.toFixed(1)}`);
+  }
+  return { points, key: key.join(";") };
+}
 
 interface Framing {
   distance: number;
@@ -100,7 +113,7 @@ function applyViewOffset(camera: PerspectiveCamera, width: number, height: numbe
 }
 
 /** Closest overview at which every fit point lands inside the free area, centered there. */
-function frameOverview(probe: PerspectiveCamera, width: number, height: number, insets: HudInsets): Framing {
+function frameOverview(probe: PerspectiveCamera, width: number, height: number, insets: HudInsets, fit: Vector3[]): Framing {
   const point = new Vector3();
   const free = {
     left: insets.left + FIT_MARGIN,
@@ -113,7 +126,7 @@ function frameOverview(probe: PerspectiveCamera, width: number, height: number, 
     probe.lookAt(OVERVIEW_TARGET);
     probe.updateMatrixWorld();
     const box = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
-    for (const p of FIT_POINTS) {
+    for (const p of fit) {
       point.copy(p).project(probe);
       const x = ((point.x + 1) / 2) * width;
       const y = ((1 - point.y) / 2) * height;
@@ -153,25 +166,40 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
   const dolly = useRef({ settling: false, last: null as AgentId | null });
   const size = useThree((state) => state.size);
   const probe = useMemo(() => new PerspectiveCamera(), []);
-  const fit = useRef({ key: "", insets: hudInsets(0), framing: null as Framing | null, shiftX: 0, shiftY: 0 });
+  const fit = useRef({
+    key: "",
+    layoutKey: "",
+    layoutVersion: -1,
+    world: null as World | null,
+    insets: hudInsets(0),
+    framing: null as Framing | null,
+    shiftX: 0,
+    shiftY: 0,
+  });
   useFrame(({ camera }, delta) => {
     if (!controls.current) return;
     const d = dolly.current;
     const dt = Math.min(delta, 0.05);
     const f = fit.current;
     const perspective = camera as PerspectiveCamera;
-    const key = `${size.width}x${size.height}`;
+    const world = worldRef.current;
+    const layout = f.layoutVersion === world.layoutVersion && f.world === world ? null : fitPoints(world);
+    f.world = world;
+    f.layoutVersion = world.layoutVersion;
+    const key = `${size.width}x${size.height}|${layout ? layout.key : f.layoutKey}`;
+    if (layout) f.layoutKey = layout.key;
     if (f.key !== key) {
       const first = f.key === "";
       f.key = key;
       f.insets = hudInsets(size.width);
       probe.copy(perspective);
-      f.framing = frameOverview(probe, size.width, size.height, f.insets);
+      const previous = f.framing;
+      f.framing = frameOverview(probe, size.width, size.height, f.insets, (layout ?? fitPoints(world)).points);
       if (first) {
         camera.position.copy(OVERVIEW_TARGET).addScaledVector(OVERVIEW_DIRECTION, f.framing.distance);
         f.shiftX = f.framing.shiftX;
         f.shiftY = f.framing.shiftY;
-      } else if (!selected) d.settling = true;
+      } else if (!selected && (!previous || Math.abs(previous.distance - f.framing.distance) > 0.3)) d.settling = true;
     }
     const framing = f.framing!;
     const shiftK = 1 - Math.exp(-dt * 2.4);
@@ -185,13 +213,16 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
     }
     const target = controls.current.target;
     if (selected) {
-      const agent = worldRef.current.agents[selected];
+      const agent = world.agents[selected];
       const [x, z] = agent.position;
       goal.current.set(x, PORTRAIT_HEIGHT, z);
       if (Number.isNaN(facing.current)) facing.current = agent.facing;
       const turn = Math.atan2(Math.sin(agent.facing - facing.current), Math.cos(agent.facing - facing.current));
       facing.current += turn * (1 - Math.exp(-dt * 1.6));
-      const atStation = ZONE_ORDER.some((id) => Math.hypot(ZONES[id].position[0] - x, ZONES[id].position[1] - z) < STATION_CLEARANCE);
+      const atStation = world.moduleOrder.some((id) => {
+        const [mx, mz] = world.modules[id]!.position;
+        return Math.hypot(mx - x, mz - z) < STATION_CLEARANCE;
+      });
       const angle = atStation ? Math.atan2(-x, -z) + STATION_SWING : facing.current + PORTRAIT_SWING;
       portrait.current.set(x + Math.sin(angle) * CLOSE_UP_DISTANCE, PORTRAIT_HEIGHT + 0.7, z + Math.cos(angle) * CLOSE_UP_DISTANCE);
       const k = 1 - Math.exp(-dt * 2.4);
@@ -252,9 +283,6 @@ export default function LabScene({
       <Chamber />
       <Station worldRef={worldRef} reflections={quality === "high"} />
       <IntentCore worldRef={worldRef} />
-      {ZONE_ORDER.map((id) => (
-        <Zone key={id} id={id} worldRef={worldRef} />
-      ))}
       {AGENT_ORDER.map((id) => (
         <Character key={id} id={id} worldRef={worldRef} selected={selected === id} onSelect={onSelect} />
       ))}

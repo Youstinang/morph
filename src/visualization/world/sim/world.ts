@@ -1,47 +1,22 @@
-import {
-  AGENTS,
-  AGENT_ORDER,
-  CORE_RADIUS,
-  ZONES,
-  ZONE_ORDER,
-  coreSpot,
-  homePosition,
-  zoneSpot,
-} from "./roster";
+import { DISSOLVE_SECONDS, applyModuleChange, moduleSpot, removeModule, stepModules } from "./modules";
+import { AGENTS, AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./roster";
 import {
   BUDGET_ANSWER,
   BUDGET_AUTO_CONFIRM_SECONDS,
   FINDINGS,
+  MODULE_CHANGES,
+  MODULE_HEADLINES,
   SCRIPT,
-  ZONE_HEADLINES,
   type Finding,
-  type ZoneHeadline,
+  type ModuleHeadline,
 } from "./script";
-import type {
-  Action,
-  AgentId,
-  AgentRuntime,
-  CoreState,
-  ScenarioWeights,
-  Target,
-  Vec2,
-  World,
-  ZoneId,
-  ZoneRuntime,
-} from "./types";
+import type { Action, AgentId, AgentRuntime, CoreState, ModuleId, ScenarioWeights, Target, Vec2, World } from "./types";
 
 export const WALK_SPEED = 3.4;
 export const ASSIGN_PAUSE = 0.55;
 export const HANDOFF_SECONDS = 1.4;
 export const LOOP_RESTART_DELAY = 7;
 const MAX_LOG = 40;
-
-const ZONES_BY_SIGNAL: Record<string, readonly ZoneId[]> = {
-  plan: ["market", "competition", "regulation"],
-  "zone:economics": ["economics"],
-  "zone:risk": ["risk"],
-  "zone:possibility": ["possibility"],
-};
 
 export function createWorld(cycle = 0): World {
   const agents = {} as Record<AgentId, AgentRuntime>;
@@ -63,15 +38,13 @@ export function createWorld(cycle = 0): World {
       hasWorked: false,
     };
   }
-  const zones = {} as Record<ZoneId, ZoneRuntime>;
-  for (const id of ZONE_ORDER) {
-    zones[id] = { id, visible: false, appearedAt: 0, activity: 0, evidence: 0 };
-  }
   return {
     time: 0,
     cycle,
     agents,
-    zones,
+    modules: {},
+    moduleOrder: [],
+    layoutVersion: 0,
     signals: new Map(),
     artifacts: [],
     log: [],
@@ -88,10 +61,7 @@ function log(world: World, agent: World["log"][number]["agent"], text: string, b
 export function emitSignal(world: World, signal: string, text?: string) {
   if (world.signals.has(signal)) return;
   world.signals.set(signal, world.time);
-  for (const zone of ZONES_BY_SIGNAL[signal] ?? []) {
-    world.zones[zone].visible = true;
-    world.zones[zone].appearedAt = world.time;
-  }
+  for (const change of MODULE_CHANGES[signal] ?? []) applyModuleChange(world, change);
   if (text) log(world, "system", text, true);
 }
 
@@ -101,8 +71,8 @@ export function confirmBudget(world: World) {
   log(world, "user", `You set the launch budget: ${BUDGET_ANSWER}.`, true);
 }
 
-export function resolveTarget(id: AgentId, target: Target): Vec2 {
-  if ("zone" in target) return zoneSpot(target.zone, id);
+export function resolveTarget(world: World, id: AgentId, target: Target): Vec2 {
+  if ("zone" in target) return moduleSpot(world, target.zone, id) ?? coreSpot(id);
   if ("core" in target) return coreSpot(id);
   return homePosition(id);
 }
@@ -136,7 +106,7 @@ function enterAction(world: World, agent: AgentRuntime, action: Action) {
   const name = AGENTS[agent.id].name;
   switch (action.kind) {
     case "moveTo": {
-      agent.route = planRoute(agent.position, resolveTarget(agent.id, action.target));
+      agent.route = planRoute(agent.position, resolveTarget(world, agent.id, action.target));
       agent.zone = null;
       if (action.state !== "returning") log(world, agent.id, `${name} is ${action.task}.`);
       break;
@@ -241,12 +211,13 @@ function stepAgent(world: World, agent: AgentRuntime, dt: number) {
         agent.state = action.state;
         agent.task = action.task;
         agent.zone = action.zone ?? null;
-        faceToward(agent, action.zone ? zoneCenter(action.zone) : [0, 0]);
+        const mod = action.zone ? world.modules[action.zone] : undefined;
+        if (action.zone) followModule(world, agent, action.zone, dt);
+        faceToward(agent, mod ? mod.position : [0, 0]);
         agent.actionElapsed += dt;
         agent.progress = Math.min(1, agent.actionElapsed / action.seconds);
-        if (action.zone && action.evidence !== undefined) {
-          const zone = world.zones[action.zone];
-          zone.evidence = Math.max(zone.evidence, Math.floor(action.evidence * agent.progress));
+        if (mod && action.evidence !== undefined) {
+          mod.evidence = Math.max(mod.evidence, Math.floor(action.evidence * agent.progress));
         }
         if (agent.actionElapsed < action.seconds) return;
         advance(agent);
@@ -294,8 +265,17 @@ function stepAgent(world: World, agent: AgentRuntime, dt: number) {
   }
 }
 
-function zoneCenter(zone: ZoneId): Vec2 {
-  return ZONES[zone].position;
+/** If the module was re-laid out while the agent works there, the agent walks to its new spot. */
+function followModule(world: World, agent: AgentRuntime, zone: ModuleId, dt: number) {
+  const spot = moduleSpot(world, zone, agent.id);
+  if (!spot) return;
+  const dx = spot[0] - agent.position[0];
+  const dz = spot[1] - agent.position[1];
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.02) return;
+  const step = Math.min(distance, WALK_SPEED * dt);
+  agent.position = [agent.position[0] + (dx / distance) * step, agent.position[1] + (dz / distance) * step];
+  agent.moving = true;
 }
 
 function stepArtifacts(world: World) {
@@ -311,13 +291,6 @@ function stepArtifacts(world: World) {
   });
 }
 
-function stepZones(world: World) {
-  for (const id of ZONE_ORDER) world.zones[id].activity = 0;
-  for (const id of AGENT_ORDER) {
-    const agent = world.agents[id];
-    if (agent.zone) world.zones[agent.zone].activity += 1;
-  }
-}
 
 export function stepWorld(world: World, dt: number): World {
   world.time += dt;
@@ -335,12 +308,15 @@ export function stepWorld(world: World, dt: number): World {
   }
   for (const id of AGENT_ORDER) stepAgent(world, world.agents[id], dt);
   stepArtifacts(world);
-  stepZones(world);
+  stepModules(world);
 
   const finished = AGENT_ORDER.every(
     (id) => world.agents[id].actionIndex >= SCRIPT[id].length,
   );
   if (finished && world.endedAt === null) world.endedAt = world.time;
+  if (world.endedAt !== null && world.time - world.endedAt >= LOOP_RESTART_DELAY - DISSOLVE_SECONDS - 0.5) {
+    for (const id of world.moduleOrder) removeModule(world, id);
+  }
   if (world.endedAt !== null && world.time - world.endedAt >= LOOP_RESTART_DELAY) {
     return createWorld(world.cycle + 1);
   }
@@ -383,10 +359,10 @@ export function currentFindings(world: World): Finding[] {
   ).sort((a, b) => world.signals.get(a.signal)! - world.signals.get(b.signal)!);
 }
 
-export function zoneHeadline(world: World, zone: ZoneId): ZoneHeadline | null {
-  let latest: ZoneHeadline | null = null;
+export function moduleHeadline(world: World, id: ModuleId): ModuleHeadline | null {
+  let latest: ModuleHeadline | null = null;
   let latestAt = -1;
-  for (const entry of ZONE_HEADLINES[zone]) {
+  for (const entry of MODULE_HEADLINES[id] ?? []) {
     const at = world.signals.get(entry.signal);
     if (at !== undefined && at >= latestAt) {
       latest = entry;

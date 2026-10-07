@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_ORDER, CORE_RADIUS, homePosition } from "./roster";
+import { MODULE_CATALOG, SCRIPT } from "./script";
 import type { AgentId, AgentState, World } from "./types";
 import {
+  LOOP_RESTART_DELAY,
   confirmBudget,
   coreState,
   createWorld,
@@ -87,15 +89,50 @@ describe("lab agent simulation", () => {
     expect(world.log.at(-1)?.agent).toBe("user");
   });
 
-  it("materializes zones only when the plan or the builder creates them", () => {
+  it("materializes modules only when the plan or the builder creates them", () => {
     const world = createWorld();
-    expect(Object.values(world.zones).some((zone) => zone.visible)).toBe(false);
+    expect(world.moduleOrder).toHaveLength(0);
     const planned = runUntil(world, (w) => w.signals.has("plan")).world;
-    expect(planned.zones.market.visible).toBe(true);
-    expect(planned.zones.economics.visible).toBe(false);
-    const built = runUntil(planned, (w) => w.signals.has("zone:risk")).world;
-    expect(built.zones.economics.visible).toBe(true);
-    expect(built.zones.risk.visible).toBe(true);
+    expect(planned.moduleOrder).toEqual(["market", "competition", "regulation"]);
+    expect(planned.modules.market!.visible).toBe(true);
+    const reserved = runUntil(planned, (w) => w.signals.has("discovery")).world;
+    expect(reserved.modules.economics!.visible).toBe(false);
+    const built = runUntil(reserved, (w) => w.signals.has("zone:risk")).world;
+    expect(built.modules.economics!.visible).toBe(true);
+    expect(built.modules.risk!.visible).toBe(true);
+  });
+
+  it("keeps every module the script sends agents to in the module catalog", () => {
+    const known = new Set(Object.keys(MODULE_CATALOG));
+    for (const id of AGENT_ORDER) {
+      for (const action of SCRIPT[id]) {
+        if (action.kind === "moveTo" && "zone" in action.target) expect(known.has(action.target.zone)).toBe(true);
+        if (action.kind === "hold" && action.zone) expect(known.has(action.zone)).toBe(true);
+      }
+    }
+  });
+
+  it("only sends agents to modules that exist, and keeps the demo layout stable", () => {
+    let world = createWorld();
+    const positions = new Map<string, string>();
+    for (let i = 0; i < 70 / DT; i += 1) {
+      world = stepWorld(world, DT);
+      for (const id of AGENT_ORDER) {
+        const zone = world.agents[id].zone;
+        if (zone) expect(world.modules[zone]).toBeDefined();
+      }
+      for (const id of world.moduleOrder) {
+        const key = world.modules[id]!.position.join(",");
+        expect(positions.get(id) ?? key).toBe(key);
+        positions.set(id, key);
+      }
+    }
+  });
+
+  it("dissolves every module before the loop restarts", () => {
+    const { world } = runUntil(createWorld(), (w) => w.endedAt !== null && w.time > w.endedAt + LOOP_RESTART_DELAY - 0.1);
+    expect(world.cycle).toBe(0);
+    expect(world.moduleOrder).toHaveLength(0);
   });
 
   it("reports core states and scenario weights from signals", () => {

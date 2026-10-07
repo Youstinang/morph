@@ -1,7 +1,5 @@
 import { useEffect, useMemo } from "react";
 import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial } from "three";
-import { ZONES } from "../sim/roster";
-import type { ZoneId } from "../sim/types";
 
 export const CENTER_X = 0.6;
 export const CENTER_Z = -3.6;
@@ -12,6 +10,9 @@ export const WALL_FROM = Math.PI * 0.9;
 export const WALL_TO = Math.PI * 2.1;
 export const WALL_HEIGHT = 10.4;
 export const BAY_OFFSET = 3.1;
+/** Power units at either end of the hall, on radius GENERATOR_RADIUS; module bays must keep clear of them. */
+export const GENERATOR_ANGLES = [0.93 * Math.PI, 2.07 * Math.PI];
+export const GENERATOR_RADIUS = 15.4;
 
 export const NEON = {
   cyan: "#21e4ff",
@@ -29,23 +30,12 @@ export function faceCenter(angle: number): number {
   return Math.atan2(-Math.cos(angle), -Math.sin(angle));
 }
 
-export interface BayPlacement {
-  x: number;
-  z: number;
-  /** Yaw that points the bay's local +Z at the Intent Core. */
-  yaw: number;
-  /** Polar angle around the deck centre, normalised to [0.5π, 2.5π). */
-  angle: number;
-}
-
-export function bayPlacement(id: ZoneId): BayPlacement {
-  const [zx, zz] = ZONES[id].position;
-  const distance = Math.hypot(zx, zz);
-  const x = zx + (zx / distance) * BAY_OFFSET;
-  const z = zz + (zz / distance) * BAY_OFFSET;
-  let angle = Math.atan2(z - CENTER_Z, x - CENTER_X);
+/** Polar angle around the deck centre of the bay behind a module at (x, z), normalised to [0.5π, 2.5π). */
+export function bayAngle(x: number, z: number): number {
+  const distance = Math.hypot(x, z) || 1;
+  let angle = Math.atan2(z + (z / distance) * BAY_OFFSET - CENTER_Z, x + (x / distance) * BAY_OFFSET - CENTER_X);
   while (angle < Math.PI * 0.5) angle += Math.PI * 2;
-  return { x, z, yaw: Math.atan2(-zx, -zz), angle };
+  return angle;
 }
 
 export function seeded(seed: number) {

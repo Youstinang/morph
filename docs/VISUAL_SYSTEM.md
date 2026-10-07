@@ -96,9 +96,25 @@ Performance: models are preloaded and cloned with `SkeletonUtils`. The six skinn
 
 ## Adaptive analysis zones
 
-Zones are distinct spatial machines that materialize, grow, shrink, gain or lose emphasis, and leave as relevance changes. They are not floating dashboard cards. The layout algorithm and metaphor are decided at Phase 8 and must avoid collisions in normal demo states.
+Zones are distinct spatial machines that materialize, grow, shrink, gain or lose emphasis, and leave as relevance changes. They are not floating dashboard cards.
 
-**Workstations (user direction, 2026-10-07):** each zone has a workstation model that matches its kind of work, so agents no longer all work at the same-looking station. The user generated the three models with Meshy. They are converted with the same offline pipeline as the agents (about 50,000 triangles and 2 MB each) and stored in `public/models/stations/`. They are wired up in `scene/zone-station.tsx`.
+**Spatial modules and layout (Phase 8, user choice 2026-10-07: grouped neighborhoods).** Each work area is a configured module (`ModuleSpec`: id, title, neighborhood, workstation, surface, color), not a hardcoded zone. Modules can be created, reserved and then revealed, removed, emphasized, muted, collapsed, expanded and resized (`sim/modules.ts`). The demo's six modules and the story moments that open them live in `sim/script.ts` (`MODULE_CATALOG`, `MODULE_CHANGES`).
+
+- **Neighborhoods** (`sim/layout.ts`), with bearings measured around the Core from straight back:
+  - research, on the left and back (centre −34°, bounds −76° to 4°);
+  - analysis, on the right and back (centre 56°, bounds 34° to 76°);
+  - decision, in front on the right (centre 109°, bounds 108° to 140°).
+  The names are generic, so any objective can use them.
+- **Placement:** each neighborhood keeps its modules in creation order, centred on its anchor, at a preferred spacing. Adding or removing a module only moves its own neighborhood.
+- **Crowding:** a crowded neighborhood first moves outward (up to radius 11.2 for research and analysis, 9.5 for decision), then shrinks its modules. Footprints never overlap, and bays stay clear of the generators and the wall.
+- **Capacity:** four research, four analysis and three decision modules stay at a readable size (40% or more).
+- **One rig per module** (`scene/zone.tsx`): station, panel, shards, scenario branches, plus its bay, service arm and Core light-track (`scene/module-fixtures.tsx`). The rig glides when the layout moves it.
+- **Materializing and dissolving:** a module rises in a column of light and dissolves the same way. The gap closes only after the dissolve finishes. All modules dissolve before the story loops.
+- **Agents follow:** agents working at a module walk to its new spot if it moves.
+- **Camera:** the overview frames each neighborhood's arc plus any module pushed beyond it, and refits smoothly only when the framing actually changes.
+- **Development sandbox:** `/dev/modules` (development only) exercises every operation on the real deck.
+
+**Workstations (user direction, 2026-10-07):** each zone has a workstation model that matches its kind of work, so agents no longer all work at the same-looking station. The user generated the three models with Meshy. They are converted with the same offline pipeline as the agents (about 50,000 triangles and 2 MB each) and stored in `public/models/stations/`. They are wired up in `scene/zone-station.tsx`, and each module's `station` field picks one.
 
 | Zone | Kind of work | Workstation |
 | --- | --- | --- |
