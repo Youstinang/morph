@@ -1,21 +1,7 @@
 export type Vec2 = readonly [x: number, z: number];
 
-export const AGENT_STATES = [
-  "idle",
-  "assigned",
-  "moving",
-  "working",
-  "waiting",
-  "handoff",
-  "collaborating",
-  "evaluating",
-  "blocked",
-  "failed",
-  "retrying",
-  "completed",
-  "returning",
-] as const;
-export type AgentState = (typeof AGENT_STATES)[number];
+export { AGENT_STATES, type AgentState } from "@/state/domain";
+import type { AgentState } from "@/state/domain";
 
 export type AgentId = "nova" | "orion" | "sage" | "brix" | "vex" | "lume";
 

@@ -1,21 +1,18 @@
-import type { Action, AgentId, ModuleChange, ModuleId, ModuleSpec, ScenarioWeights } from "./types";
+import {
+  BUDGET_ANSWER,
+  BUDGET_QUESTION,
+  DEMO_MODULES,
+  OBJECTIVE,
+  RECOMMENDATION,
+  RECOMMENDATION_REASON,
+  SCENARIO_LABELS,
+  type DemoModuleId,
+} from "@/state/fixtures/uae-market";
+import type { Action, AgentId, ModuleChange, ModuleId, ModuleSpec } from "./types";
 
-export const OBJECTIVE =
-  "Should a European AI software company enter the UAE market?";
+export { BUDGET_ANSWER, BUDGET_QUESTION, OBJECTIVE, RECOMMENDATION, RECOMMENDATION_REASON, SCENARIO_LABELS };
 
-export const BUDGET_QUESTION = "What's the most you can spend on the launch?";
-export const BUDGET_ANSWER = "USD 500,000";
 export const BUDGET_AUTO_CONFIRM_SECONDS = 3.5;
-
-export const RECOMMENDATION = "Start with a local partner";
-export const RECOMMENDATION_REASON =
-  "Big UAE companies take 9–12 months to buy. On a USD 500,000 budget, going in alone runs out of money before deals close. A local partner already has customers and can keep data inside the UAE.";
-
-export const SCENARIO_LABELS: Record<keyof ScenarioWeights, string> = {
-  direct: "Go in alone",
-  partnership: "Partner locally",
-  delay: "Wait for now",
-};
 
 /**
  * Agent `task` strings are "-ing" phrases so they read both as a status ("Checking…")
@@ -121,44 +118,25 @@ export const SCRIPT: Record<AgentId, readonly Action[]> = {
   ],
 };
 
-export type FindingKind = "fact" | "doubt" | "conclusion";
-
-export interface Finding {
-  signal: string;
-  kind: FindingKind;
-  text: string;
-  /** A later finding that supersedes this one removes it from view. */
-  replacedBy?: string;
-}
-
-export const FINDINGS: readonly Finding[] = [
-  { signal: "pkg-market", kind: "fact", text: "UAE companies are actively buying AI software." },
-  { signal: "competition", kind: "fact", text: "Two local rivals already sell to banks and government." },
-  { signal: "rules", kind: "fact", text: "Customer data must stay inside the UAE." },
-  { signal: "budget", kind: "fact", text: "Your launch budget is capped at USD 500,000." },
-  { signal: "analysis", kind: "fact", text: "Going in alone just fits the budget, if deals close within 6 months.", replacedBy: "retry-done" },
-  { signal: "challenge", kind: "doubt", text: "No proof yet that big companies buy within 6 months.", replacedBy: "retry-done" },
-  { signal: "retry-done", kind: "fact", text: "Big companies take 9–12 months to buy, so going in alone runs over budget." },
-  { signal: "risk-check", kind: "doubt", text: "Biggest risk: money runs out before deals close." },
-  { signal: "shift", kind: "conclusion", text: "A local partner fits the budget and the slow buying cycle best." },
-];
-
 export interface ModuleHeadline {
   signal: string;
   headline: string;
   detail: string;
 }
 
-type DemoModule = "market" | "competition" | "regulation" | "economics" | "risk" | "possibility";
-
-export const MODULE_CATALOG: Record<DemoModule, ModuleSpec> = {
-  market: { id: "market", title: "Market demand", group: "research", station: "console", surface: "panel", color: "#8fd0ff" },
-  competition: { id: "competition", title: "Competitors", group: "research", station: "table", surface: "panel", color: "#8fd0ff" },
-  regulation: { id: "regulation", title: "Rules", group: "research", station: "console", surface: "panel", color: "#8fd0ff" },
-  economics: { id: "economics", title: "Costs", group: "analysis", station: "hologram", surface: "panel", color: "#ffc27a" },
-  risk: { id: "risk", title: "Risks", group: "analysis", station: "table", surface: "panel", color: "#ff8f6b" },
-  possibility: { id: "possibility", title: "Options", group: "decision", station: "platform", surface: "scenarios", color: "#b98cff" },
+/** How each demo module looks: the workstation that matches its kind of work, its surface and its color. */
+const PRESENTATION: Record<DemoModuleId, Pick<ModuleSpec, "station" | "surface" | "color">> = {
+  market: { station: "console", surface: "panel", color: "#8fd0ff" },
+  competition: { station: "table", surface: "panel", color: "#8fd0ff" },
+  regulation: { station: "console", surface: "panel", color: "#8fd0ff" },
+  economics: { station: "hologram", surface: "panel", color: "#ffc27a" },
+  risk: { station: "table", surface: "panel", color: "#ff8f6b" },
+  possibility: { station: "platform", surface: "scenarios", color: "#b98cff" },
 };
+
+export const MODULE_CATALOG = Object.fromEntries(
+  (Object.keys(DEMO_MODULES) as DemoModuleId[]).map((id) => [id, { id, ...DEMO_MODULES[id], ...PRESENTATION[id] }]),
+) as Record<DemoModuleId, ModuleSpec>;
 
 /**
  * How the deck changes as the story unfolds. Nova's plan opens the three research areas; the discovery

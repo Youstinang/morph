@@ -47,7 +47,7 @@ ESLint rules prohibit the visualization layer from importing server adapters, or
 
 Implemented (Phases 1–2 of the previous plan): Next.js 16.3.8 App Router, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3 with CSS variables, Zod 4.6.5, Vitest 5.0.3 with React Testing Library, ESLint, npm, Radix Tooltip. Exact versions are pinned in `package.json`.
 
-Added 2026-10-06 for the world slice: three 0.186.1, @react-three/fiber 9.8.1, @react-three/drei 10.7.9, @react-three/postprocessing 3.1.3, postprocessing 6.39.5 (bloom and vignette), and @types/three. GSAP is not needed so far because procedural animation runs in `useFrame`. Still to evaluate: Zustand (Phase 9) and Playwright if useful (Phase 24). A postprocessing library, an audio library, or authored 3D models would each need a decision. No database, persistence, hosting, queue, Redis, Kafka, or Kubernetes is selected.
+Added 2026-10-06 for the world slice: three 0.186.1, @react-three/fiber 9.8.1, @react-three/drei 10.7.9, @react-three/postprocessing 3.1.3, postprocessing 6.39.5 (bloom and vignette), and @types/three. GSAP is not needed so far because procedural animation runs in `useFrame`. Zustand 5.0.15 was added in Phase 9 for the workspace store (delegated by the user). Still to evaluate: Playwright if useful (Phase 24). A postprocessing library, an audio library, or authored 3D models would each need a decision. No database, persistence, hosting, queue, Redis, Kafka, or Kubernetes is selected.
 
 ## Trust and resource boundaries
 

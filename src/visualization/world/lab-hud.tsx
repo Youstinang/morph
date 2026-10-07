@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { BUDGET_ANSWER } from "@/state/fixtures/uae-market";
+import { useWorkspace } from "@/state/react";
+import {
+  findingLines,
+  selectAgents,
+  selectAssumptions,
+  selectEvidence,
+  selectLatestAnswer,
+  selectObjective,
+  selectPendingInput,
+  selectRecommendation,
+  selectScenarios,
+} from "@/state/selectors";
 import { CORE_WORDS, STATE_WORDS, sentenceCase } from "./copy";
 import { AGENTS } from "./sim/roster";
-import {
-  BUDGET_ANSWER,
-  BUDGET_QUESTION,
-  OBJECTIVE,
-  RECOMMENDATION,
-  RECOMMENDATION_REASON,
-  SCENARIO_LABELS,
-} from "./sim/script";
 import type { AgentId, LogEntry } from "./sim/types";
 import type { LabSnapshot } from "./snapshot";
 
@@ -37,10 +42,24 @@ function speakerColor(entry: LogEntry) {
 export function LabHud(props: LabHudProps) {
   const { snapshot, selected } = props;
   const [showSteps, setShowSteps] = useState(false);
-  const selectedAgent = selected ? snapshot.agents.find((agent) => agent.id === selected) : null;
-  const askingBudget =
-    snapshot.budgetPending || (snapshot.budgetConfirmedAgo !== null && snapshot.budgetConfirmedAgo < 3);
-  const findings = snapshot.findings.slice(-MAX_FINDINGS);
+  const objective = useWorkspace(selectObjective);
+  const agents = useWorkspace(selectAgents);
+  const evidence = useWorkspace(selectEvidence);
+  const assumptions = useWorkspace(selectAssumptions);
+  const scenarios = useWorkspace(selectScenarios);
+  const recommendation = useWorkspace(selectRecommendation);
+  const mode = useWorkspace((workspace) => workspace.mode);
+  const pending = useWorkspace(selectPendingInput);
+  const answered = useWorkspace(selectLatestAnswer);
+
+  const selectedAgent = selected ? agents.find((agent) => agent.id === selected) : null;
+  const request = pending ?? answered;
+  const askingBudget = pending !== null || (answered !== null && snapshot.time - answered.answeredAt! < 3);
+  const findings = useMemo(
+    () => findingLines(evidence, assumptions, recommendation).slice(-MAX_FINDINGS),
+    [evidence, assumptions, recommendation],
+  );
+  const answer = recommendation?.status === "final" ? recommendation : null;
 
   return (
     <div className="lab-hud">
@@ -53,7 +72,7 @@ export function LabHud(props: LabHudProps) {
             <span className="status-dot" /> {CORE_WORDS[snapshot.core]}
           </span>
         </div>
-        <p className="lab-objective">{snapshot.time > 0.6 ? OBJECTIVE : "\u00a0"}</p>
+        <p className="lab-objective">{objective ? objective.text : "\u00a0"}</p>
         <div className="lab-controls" role="toolbar" aria-label="Demo controls">
           <button type="button" className="lab-btn" onClick={props.onTogglePause}>
             {props.paused ? "Resume" : "Pause"}
@@ -75,15 +94,16 @@ export function LabHud(props: LabHudProps) {
 
       <div className="lab-team">
         <nav className="lab-roster" aria-label="Team">
-          {snapshot.agents.map((agent) => {
-            const profile = AGENTS[agent.id];
+          {agents.map((agent) => {
+            const id = agent.id as AgentId;
+            const profile = AGENTS[id];
             return (
               <button
                 key={agent.id}
                 type="button"
                 className="lab-roster__item"
-                aria-pressed={selected === agent.id}
-                onClick={() => props.onSelect(selected === agent.id ? null : agent.id)}
+                aria-pressed={selected === id}
+                onClick={() => props.onSelect(selected === id ? null : id)}
               >
                 <span className="lab-roster__dot" style={{ background: profile.look.accent }} />
                 <span className="lab-roster__name">{profile.name}</span>
@@ -114,37 +134,37 @@ export function LabHud(props: LabHudProps) {
 
       <div className="lab-info">
         {selectedAgent && (
-          <section className="lab-detail" aria-label={`${AGENTS[selectedAgent.id].name} detail`}>
+          <section className="lab-detail" aria-label={`${selectedAgent.name} detail`}>
             <p className="lab-detail__name">
-              {AGENTS[selectedAgent.id].name} <span>{AGENTS[selectedAgent.id].role}</span>
+              {selectedAgent.name} <span>{AGENTS[selectedAgent.id as AgentId].role}</span>
             </p>
-            <p className="lab-detail__summary">{AGENTS[selectedAgent.id].summary}</p>
+            <p className="lab-detail__summary">{AGENTS[selectedAgent.id as AgentId].summary}</p>
             <p className="lab-detail__now">
               <span data-state={selectedAgent.state}>{STATE_WORDS[selectedAgent.state]}</span>
               {sentenceCase(selectedAgent.task)}
             </p>
           </section>
         )}
-        {(findings.length > 0 || snapshot.weights) && (
+        {(findings.length > 0 || scenarios.length > 0) && (
           <section className="lab-findings" aria-label="What we know so far">
             <div className="lab-findings__list">
               <p className="section-label">What we know so far</p>
               <ul>
                 {findings.map((finding) => (
-                  <li key={finding.signal} data-kind={finding.kind}>
+                  <li key={finding.key} data-kind={finding.kind}>
                     {finding.text}
                   </li>
                 ))}
               </ul>
             </div>
-            {snapshot.weights && (
+            {scenarios.length > 0 && (
               <div className="lab-options">
                 <p className="lab-options__title">How the options compare</p>
-                {(Object.keys(SCENARIO_LABELS) as (keyof typeof SCENARIO_LABELS)[]).map((key) => (
-                  <div key={key} className="lab-scenario">
-                    <span>{SCENARIO_LABELS[key]}</span>
+                {scenarios.map((scenario) => (
+                  <div key={scenario.id} className="lab-scenario">
+                    <span>{scenario.label}</span>
                     <span className="lab-scenario__bar">
-                      <span style={{ width: `${Math.round(snapshot.weights![key] * 100)}%` }} />
+                      <span style={{ width: `${Math.round(scenario.assessment * 100)}%` }} />
                     </span>
                   </div>
                 ))}
@@ -153,11 +173,13 @@ export function LabHud(props: LabHudProps) {
             )}
           </section>
         )}
-        {snapshot.recommendation && (
+        {answer && (
           <section className="lab-recommendation" aria-label="Recommendation">
-            <p className="section-label">Our answer · moderate confidence · demo data, not live research</p>
-            <h2>{RECOMMENDATION}</h2>
-            <p>{RECOMMENDATION_REASON}</p>
+            <p className="section-label">
+              Our answer · {answer.confidence} confidence{mode === "demo" ? " · demo data, not live research" : ""}
+            </p>
+            <h2>{answer.statement}</h2>
+            <p>{answer.reason}</p>
           </section>
         )}
       </div>
@@ -169,14 +191,14 @@ export function LabHud(props: LabHudProps) {
             {snapshot.caption.text}
           </p>
         )}
-        {askingBudget && (
+        {askingBudget && request && (
           <section className="lab-input" aria-label="Your input">
             <span className="lab-caption__dot" style={{ background: AGENTS.nova.look.accent }} />
             <p className="lab-input__question">
-              <span>Nova asks:</span> {BUDGET_QUESTION}
+              <span>Nova asks:</span> {request.question}
             </p>
-            <strong className="lab-input__value">{BUDGET_ANSWER}</strong>
-            {snapshot.budgetPending ? (
+            <strong className="lab-input__value">{request.answer ?? BUDGET_ANSWER}</strong>
+            {pending ? (
               <button type="button" className="action action-primary" onClick={props.onConfirmBudget}>
                 Confirm
               </button>

@@ -3,11 +3,9 @@ import { AGENTS, AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./rost
 import {
   BUDGET_ANSWER,
   BUDGET_AUTO_CONFIRM_SECONDS,
-  FINDINGS,
   MODULE_CHANGES,
   MODULE_HEADLINES,
   SCRIPT,
-  type Finding,
   type ModuleHeadline,
 } from "./script";
 import type { Action, AgentId, AgentRuntime, CoreState, ModuleId, ScenarioWeights, Target, Vec2, World } from "./types";
@@ -348,15 +346,6 @@ export function scenarioWeights(world: World): ScenarioWeights | null {
 
 export function budgetPending(world: World): boolean {
   return world.signals.has("budget-request") && !world.signals.has("budget");
-}
-
-/** Findings learned so far, oldest first, without ones a later finding has superseded. */
-export function currentFindings(world: World): Finding[] {
-  return FINDINGS.filter(
-    (finding) =>
-      world.signals.has(finding.signal) &&
-      !(finding.replacedBy && world.signals.has(finding.replacedBy)),
-  ).sort((a, b) => world.signals.get(a.signal)! - world.signals.get(b.signal)!);
 }
 
 export function moduleHeadline(world: World, id: ModuleId): ModuleHeadline | null {
