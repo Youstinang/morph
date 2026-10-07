@@ -345,6 +345,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: a few `as AgentId` casts on event agent ids in the demo runtime (guarded by lookups); the outdated `/dev/design-system` page. Left as is.
 - Dependencies: none added since Phase 9; production audit clean. Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
 
+## Audit 2026-10-07 (after Phases 13–15)
+- No Critical or High findings.
+- Medium, open: `src/orchestration/live-question.ts` (about 530 lines) now holds planning, the work schedule, handoffs, arrivals and results for live questions. Ownership is clear and it is tested, but it is the place most likely to grow; split the result handling out if Phase 16 adds much more.
+- Medium, open (for Phase 24, security): `/api/agent-step` shares `/api/plan`'s open `X-Forwarded-For` and content-type weaknesses. With the raised limits, one question is capped at USD 0.05, and the hourly server cap (60 questions) bounds the worst case at about USD 3 per hour per server process.
+- Low: step results are cast to their type in `live-question.ts`; each reply is validated with Zod and checked to be for the step asked, so the casts are safe at runtime. A few guarded `as AgentId` casts remain in the demo runtime. Left as is.
+- Boundaries: lint enforces that the visualization layer imports no orchestration, server or configuration code; the new Phase 15 visuals read only the world. Dependencies: none added since Phase 9; production audit clean. Performance: 58–60 FPS with the new effects; their geometry and materials are disposed on unmount. Secrets: neither key is in the production build. Demo leakage: the demo makes no network or model calls (tested).
+
 ## Deferred Decisions
 - Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05). Phase 18: camera style. Phase 20: search provider.
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
