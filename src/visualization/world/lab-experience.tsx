@@ -7,8 +7,7 @@ import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
 import { LabHud } from "./lab-hud";
 import { ReducedMotionContext, usePrefersReducedMotion } from "./motion";
-import { requestPlan } from "./plan-client";
-import { createDemoSession } from "./sim/session";
+import type { LabSession } from "./sim/session";
 import type { AgentId, World } from "./sim/types";
 import { takeSnapshot, type LabSnapshot } from "./snapshot";
 import "./lab.css";
@@ -20,8 +19,8 @@ const LabScene = dynamic(() => import("./lab-scene"), {
 
 const SPEEDS = [1, 2] as const;
 
-export function LabExperience() {
-  const [session] = useState(createDemoSession);
+export function LabExperience({ createSession }: { createSession: () => LabSession }) {
+  const [session] = useState(createSession);
   const worldRef = useRef<World>(session.world);
   const tags = useRef<TagRegistry>({});
   const [snapshot, setSnapshot] = useState<LabSnapshot>(() => takeSnapshot(session.world, session.bus.history()));
@@ -36,13 +35,7 @@ export function LabExperience() {
     (world: World) => setSnapshot(takeSnapshot(world, session.bus.history())),
     [session],
   );
-  const step = useCallback(
-    (dt: number) => {
-      session.step(dt);
-      return session.world;
-    },
-    [session],
-  );
+  const advance = useCallback((realSeconds: number, speed: number) => session.advance(realSeconds, speed), [session]);
   const restart = useCallback(() => {
     session.restart();
     worldRef.current = session.world;
@@ -51,7 +44,7 @@ export function LabExperience() {
   }, [session, handleSnapshot]);
   const ask = useCallback(
     (objective: string) => {
-      session.startLive(objective, requestPlan);
+      session.startLive(objective);
       worldRef.current = session.world;
       setSelected(null);
       handleSnapshot(session.world);
@@ -69,7 +62,7 @@ export function LabExperience() {
               worldRef={worldRef}
               paused={paused}
               speed={SPEEDS[speedIndex] ?? 1}
-              step={step}
+              advance={advance}
               onSnapshot={handleSnapshot}
               selected={selected}
               onSelect={setSelected}

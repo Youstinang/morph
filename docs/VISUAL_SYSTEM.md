@@ -98,7 +98,7 @@ Performance: models are preloaded and cloned with `SkeletonUtils`. The six skinn
 
 Zones are distinct spatial machines that materialize, grow, shrink, gain or lose emphasis, and leave as relevance changes. They are not floating dashboard cards.
 
-**Spatial modules and layout (Phase 8, user choice 2026-10-07: grouped neighborhoods).** Each work area is a configured module (`ModuleSpec`: id, title, neighborhood, workstation, surface, color), not a hardcoded zone. Modules can be created, reserved and then revealed, removed, emphasized, muted, collapsed, expanded and resized (`sim/modules.ts`). The demo's six modules and the story moments that open them live in `sim/script.ts` (`MODULE_CATALOG`, `MODULE_CHANGES`).
+**Spatial modules and layout (Phase 8, user choice 2026-10-07: grouped neighborhoods).** Each work area is a configured module (`ModuleSpec`: id, title, neighborhood, workstation, surface, color), not a hardcoded zone. Modules can be created, reserved and then revealed, removed, emphasized, muted, collapsed, expanded and resized (`sim/modules.ts`). The demo's six modules and their workstations live in `sim/presentation.ts` (`MODULE_CATALOG`, `presentationFor`); the story moments that open them are in the fixture's `UAE_TIMELINE`.
 
 - **Neighborhoods** (`sim/layout.ts`), with bearings measured around the Core from straight back:
   - research, on the left and back (centre −34°, bounds −76° to 4°);
@@ -159,7 +159,7 @@ The user said the data read too technically and the UI was too noisy, and chose 
 
 - **Voice.** Short plain sentences that say what was learned, not what the system is doing: "Vex pushes back: there's no proof big UAE companies buy within 6 months", not "Assumption flagged: 6-month enterprise sales cycle is unsupported". There are no internal terms on screen, such as module, synthesis, Possibility Engine or registry.
 - **Where the text lives.**
-  - Agent `task` strings in `sim/script.ts` are "-ing" phrases, so one string serves as a status line ("Checking…"), as narration ("Orion is checking…") and in the detail card.
+  - Agent `task` strings in `src/orchestration/demo/script.ts` are "-ing" phrases, so one string serves as a status line ("Checking…"), as narration ("Orion is checking…") and in the detail card.
   - Plain words for agent and Core states live in `copy.ts`.
   - Zone names are plain: Market demand, Competitors, Rules, Costs, Risks, Options.
 - **Layout.**

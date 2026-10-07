@@ -19,7 +19,6 @@ import { Station } from "./scene/station";
 import { TagProjector } from "./scene/tag-projector";
 import type { TagRegistry } from "./agent-tags";
 
-const FIXED_STEP = 1 / 60;
 const SNAPSHOT_INTERVAL = 0.14;
 const OVERVIEW_TARGET = new Vector3(0, 1.6, -2.5);
 const CAMERA_START = new Vector3(1.5, 10, 18);
@@ -40,22 +39,16 @@ interface DriverProps {
   worldRef: RefObject<World>;
   paused: boolean;
   speed: number;
-  /** Advances the demo session one fixed step and returns the world to render. */
-  step: (dt: number) => World;
+  /** Counts a frame's real time at the given speed on the run clock and returns the world to render. */
+  advance: (realSeconds: number, speed: number) => World;
   onSnapshot: (world: World) => void;
 }
 
-function SimulationDriver({ worldRef, paused, speed, step, onSnapshot }: DriverProps) {
-  const clock = useRef({ accumulator: 0, sinceSnapshot: 0 });
+function SimulationDriver({ worldRef, paused, speed, advance, onSnapshot }: DriverProps) {
+  const clock = useRef({ sinceSnapshot: 0 });
   useFrame((_, delta) => {
     const c = clock.current;
-    if (!paused) {
-      c.accumulator += Math.min(delta, 0.1) * speed;
-      while (c.accumulator >= FIXED_STEP) {
-        worldRef.current = step(FIXED_STEP);
-        c.accumulator -= FIXED_STEP;
-      }
-    }
+    if (!paused) worldRef.current = advance(delta, speed);
     c.sinceSnapshot += delta;
     if (c.sinceSnapshot >= SNAPSHOT_INTERVAL) {
       c.sinceSnapshot = 0;
@@ -271,7 +264,7 @@ export default function LabScene({
   worldRef,
   paused,
   speed,
-  step,
+  advance,
   onSnapshot,
   selected,
   onSelect,
@@ -285,7 +278,7 @@ export default function LabScene({
       gl={{ antialias: false, powerPreference: "high-performance" }}
       onPointerMissed={() => onSelect(null)}
     >
-      <SimulationDriver worldRef={worldRef} paused={paused} speed={speed} step={step} onSnapshot={onSnapshot} />
+      <SimulationDriver worldRef={worldRef} paused={paused} speed={speed} advance={advance} onSnapshot={onSnapshot} />
       <Chamber />
       <Station worldRef={worldRef} reflections={quality === "high"} />
       <IntentCore worldRef={worldRef} />

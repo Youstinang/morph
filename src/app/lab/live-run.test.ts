@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { SAMPLE_PLAN } from "@/state/fixtures/sample-plan";
 import type { PlanResponse } from "@/state/plan";
-import type { PlanRequester } from "./live-runner";
-import { moduleSpot } from "./modules";
-import { createDemoSession, type DemoSession } from "./session";
-import { coreState } from "./world";
+import type { PlanRequester } from "@/orchestration/live-question";
+import { moduleSpot } from "@/visualization/world/sim/modules";
+import { coreState } from "@/visualization/world/sim/world";
+import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
 const usage = { calls: 1, inputTokens: 300, outputTokens: 700, estimatedUsd: 0.0009 };
 
 /** Steps the session, letting the pending plan request settle between frames. */
-async function run(session: DemoSession, seconds: number, until?: (s: DemoSession) => boolean) {
+async function run(session: LabRun, seconds: number, until?: (s: LabRun) => boolean) {
   for (let i = 0; i < seconds / DT; i += 1) {
-    session.step(DT);
+    session.run.step(DT);
     await Promise.resolve();
     if (until?.(session)) return;
   }
@@ -27,20 +27,20 @@ function requester(answer: PlanResponse) {
   return { fn, asked };
 }
 
-const cycleEvents = (s: DemoSession) => s.bus.history().filter((event) => event.cycle === s.world.cycle);
+const cycleEvents = (s: LabRun) => s.bus.history().filter((event) => event.cycle === s.world.cycle);
 
 describe("live question", () => {
   it("plans the user's question, opens its stations, sends the agents, then honestly waits", async () => {
-    const session = createDemoSession();
-    await run(session, 5);
     const { fn, asked } = requester({ ok: true, plan: SAMPLE_PLAN, usage });
-    session.startLive("Should our bakery deliver through apps?", fn);
+    const session = createLabSession({ requestPlan: fn });
+    await run(session, 5);
+    session.startLive("Should our bakery deliver through apps?");
     expect(session.mode).toBe("real");
     expect(session.world.moduleOrder).toEqual([]);
-    await run(session, 30, (s) => s.live?.phase === "waiting");
+    await run(session, 30, (s) => s.run.live?.phase === "waiting");
 
     expect(asked.map((a) => a.objective)).toEqual(["Should our bakery deliver through apps?"]);
-    expect(session.live?.phase).toBe("waiting");
+    expect(session.run.live?.phase).toBe("waiting");
     const ws = session.store.getState().workspace;
     expect(ws).toMatchObject({ mode: "real", objective: { text: "Should our bakery deliver through apps?" } });
     expect(ws.moduleOrder).toHaveLength(3);
@@ -70,10 +70,10 @@ describe("live question", () => {
   });
 
   it("shows a failed plan as a failure and sends Nova back", async () => {
-    const session = createDemoSession();
-    session.startLive("Should our bakery deliver through apps?", requester({ ok: false, reason: "the AI service is busy or out of credit." }).fn);
-    await run(session, 10, (s) => s.live?.phase === "failed");
-    expect(session.live?.phase).toBe("failed");
+    const session = createLabSession({ requestPlan: requester({ ok: false, reason: "the AI service is busy or out of credit." }).fn });
+    session.startLive("Should our bakery deliver through apps?");
+    await run(session, 10, (s) => s.run.live?.phase === "failed");
+    expect(session.run.live?.phase).toBe("failed");
     expect(coreState(session.world)).toBe("error");
     expect(cycleEvents(session).find((e) => e.type === "run_failed")?.summary).toBe("Live AI couldn't make a plan: the AI service is busy or out of credit.");
     expect(session.world.moduleOrder).toEqual([]);
@@ -82,28 +82,30 @@ describe("live question", () => {
   });
 
   it("refuses a malformed plan that slipped past the server", async () => {
-    const session = createDemoSession();
     const bad = { ok: true, plan: { ...SAMPLE_PLAN, modules: [] }, usage } as unknown as PlanResponse;
-    session.startLive("Should our bakery deliver through apps?", requester(bad).fn);
-    await run(session, 10, (s) => s.live?.phase === "failed");
-    expect(session.live?.phase).toBe("failed");
+    const session = createLabSession({ requestPlan: requester(bad).fn });
+    session.startLive("Should our bakery deliver through apps?");
+    await run(session, 10, (s) => s.run.live?.phase === "failed");
+    expect(session.run.live?.phase).toBe("failed");
     expect(session.store.getState().workspace.moduleOrder).toEqual([]);
   });
 
   it("cancels the request when the user goes back to the demo, and the demo plays again", async () => {
-    const session = createDemoSession();
     const never: PlanRequester = (_, signal) => new Promise((resolve) => signal.addEventListener("abort", () => resolve({ ok: false, reason: "cancelled" })));
     let signal: AbortSignal | null = null;
-    session.startLive("Should our bakery deliver through apps?", (objective, s) => {
-      signal = s;
-      return never(objective, s);
+    const session = createLabSession({
+      requestPlan: (objective, s) => {
+        signal = s;
+        return never(objective, s);
+      },
     });
+    session.startLive("Should our bakery deliver through apps?");
     await run(session, 3);
     expect(signal!.aborted).toBe(false);
     session.restart();
     expect(signal!.aborted).toBe(true);
     expect(session.mode).toBe("demo");
-    expect(session.live).toBeNull();
+    expect(session.run.live).toBeNull();
     await run(session, 12);
     expect(session.store.getState().workspace).toMatchObject({ mode: "demo", objective: { text: expect.stringMatching(/UAE/) } });
     expect(cycleEvents(session).some((e) => e.type === "run_failed")).toBe(false);

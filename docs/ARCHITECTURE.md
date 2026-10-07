@@ -30,12 +30,12 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 
 | Folder | Boundary | Specification equivalent |
 | --- | --- | --- |
-| `src/app` | Routes (`/`, `/demo`, `/showcase`, `/lab`), layout, global tokens | `src/app` |
+| `src/app` | Routes (`/`, `/demo`, `/showcase`, `/lab`), layout, global tokens; `app/lab/lab-session.ts` wires the run controller to the 3D world (the only place both meet) | `src/app` |
 | `src/visualization/ui` | 2D primitives and HUD | `src/components/ui`, `src/components/hud` |
-| `src/visualization/world` | `/lab` world slice: `scene/` (lighting, orbital station deck, Intent Core, characters, zones, artifacts, tag projection), `sim/` (prototype agent simulation and script), HUD and scene composition | `src/world/*` |
+| `src/visualization/world` | `/lab` world slice: `scene/` (lighting, orbital station deck, Intent Core, characters, zones, artifacts, tag projection), `sim/` (the event-driven world: agents, modules, layout, morphing, station presentation), HUD and scene composition | `src/world/*` |
 | `src/events` | `WorkspaceEvent` contract, in-memory event bus, shared agent-state transitions | `src/morph/events` |
 | `src/state` | Domain schemas, store, selectors, pure transitions, MorphOperations (`operations.ts`), the operation gate (`gate.ts`), agent-activity application | `src/morph/domain`, `state`, `operations` |
-| `src/orchestration` | Orchestrator, demo runtime | `src/morph/orchestration`, `demo` |
+| `src/orchestration` | Run controller (one run at a time, deterministic fixed-step clock, loop), demo runtime and script (`demo/`), live question run, objective planner, plan client | `src/morph/orchestration`, `demo` |
 | `src/server/providers` | Secret-bearing AI provider adapters | `src/morph/providers` |
 | `src/server/tools` | Server-side tool adapters | `src/morph/tools` |
 | `src/observability` | History, telemetry, explanations | — |
@@ -44,7 +44,7 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 
 The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. The operation gate is the single entry point for record changes during a run: it stamps the trusted channel's provenance over any claimed source, applies the operation, and announces the result on the bus (Phase 11). The morphing engine (Phase 12) is world-layer motion only: it animates accepted record changes and never changes the record itself.
 
-**Real AI (Phase 19, moved forward on 2026-10-07).** `src/server/providers/types.ts` defines the replaceable `AiProvider` (structured and text generation, short safe failure reasons, usage and estimated cost); `openai.ts` is the first adapter (plain `fetch`, strict JSON-schema output, 30 s timeout, no new dependency). `src/orchestration/planner.ts` is the objective planner (at most two calls: one plus one repair). `src/server/plan-handler.ts` behind `POST /api/plan` validates the request (8–300 characters, 4 KB body), rate-limits (5 per minute per client, 60 per hour per server process, in memory) and never logs the question. The key is read server-side from `OPENAI_API_KEY`; without it live questions are off and the demo is unaffected. In the browser, `plan-client.ts` calls the route and the prototype live runner (`sim/live-runner.ts`, beside the demo runner until Phases 13–14 move both into orchestration) acts the plan out through the same gate, events and world as the demo. ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
+**Real AI (Phase 19, moved forward on 2026-10-07).** `src/server/providers/types.ts` defines the replaceable `AiProvider` (structured and text generation, short safe failure reasons, usage and estimated cost); `openai.ts` is the first adapter (plain `fetch`, strict JSON-schema output, 30 s timeout, no new dependency). `src/orchestration/planner.ts` is the objective planner (at most two calls: one plus one repair). `src/server/plan-handler.ts` behind `POST /api/plan` validates the request (8–300 characters, 4 KB body), rate-limits (5 per minute per client, 60 per hour per server process, in memory) and never logs the question. The key is read server-side from `OPENAI_API_KEY`; without it live questions are off and the demo is unaffected. In the browser, `plan-client.ts` calls the route and the live question run (`src/orchestration/live-question.ts`, since Phase 13) acts the plan out through the same gate, events and world as the demo. ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
 
 ## Technology
 
@@ -91,6 +91,11 @@ Added 2026-10-06 for the world slice: three 0.186.1, @react-three/fiber 9.8.1, @
 | 25 | Extreme visual polish | Visual gate; audio decision |
 | 26 | Showcase / deployment | Hosting decision + visual gate |
 
-Current world slice (after Phase 10): `src/visualization/world/sim` holds two parts that meet only on the event bus. The prototype story runner (`runner.ts`) plays per-agent scripts by publishing events and waits for the world's reports. The world (`world.ts`) changes only in response to events and through its own animation (walking, artifact flights, materialize and dissolve), and reports arrivals and landed handoffs back. `session.ts` puts both on one fixed-step clock and handles the loop. The canonical store and the HUD's steps list subscribe to the same bus. Phases 11–13 add operations and move the runner into the orchestration layer as the demo runtime.
+Current run structure (after Phase 13):
+
+- `src/orchestration/run-controller.ts` owns the run: the bus, the canonical store, the operation gate, the clock and the mode. It runs one runtime at a time — the recorded demo (`demo/runtime.ts` playing `demo/script.ts` and the fixture's `UAE_TIMELINE`) or a live question — in fixed 1/60 s steps (`advance` counts real time at the chosen speed, at most 0.1 s per frame), restarts the demo loop, and clears the deck for each run.
+- Displays attach as stages (`onCycle`, `beforeStep`, `afterStep`). The 3D world (`src/visualization/world/sim/session.ts`, `attachWorld`) reacts to events, animates on the run's clock and reports arrivals and landed handoffs back; it is rebuilt empty on each new run. It never imports orchestration: it declares the small host interface it needs.
+- The demo runtime advances only on those reports, so with no world attached it waits rather than faking progress; a test stand-in that reports arrivals plays the whole story headless.
+- `src/app/lab/lab-session.ts` composes the two for `/lab`; the HUD reads the store and the event history.
 
 Note: in this order, the world (Phases 4–8) is prototyped before the canonical state (Phase 9). Prototype phases drive visuals from local typed preview controls under `/lab` that mirror the planned state/event shapes. Phases 9–13 then rewire those visuals to canonical state and events. Prototype state must not become a competing domain model.

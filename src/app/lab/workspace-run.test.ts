@@ -1,27 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { applyActivityEvent } from "@/state/apply-event";
 import { WorkspaceSchema } from "@/state/domain";
-import { DEMO_AGENTS, UAE_TIMELINE, createUaeWorkspace, isOperation } from "@/state/fixtures/uae-market";
+import { UAE_TIMELINE, createUaeWorkspace, isOperation } from "@/state/fixtures/uae-market";
+import { TEAM_AGENTS } from "@/state/team";
 import { SIGNIFICANT, applyMorphOperation } from "@/state/operations";
 import { findingLines } from "@/state/selectors";
 import { createWorkspaceStore } from "@/state/store";
-import { AGENTS, AGENT_ORDER } from "./sim/roster";
-import { createDemoSession, type DemoSession } from "./sim/session";
-import { takeSnapshot } from "./snapshot";
+import { AGENTS, AGENT_ORDER } from "@/visualization/world/sim/roster";
+import { takeSnapshot } from "@/visualization/world/snapshot";
+import { createLabSession, type LabRun } from "./lab-session";
 
 const DT = 1 / 60;
 
-function play(until: (session: DemoSession) => boolean) {
-  const session = createDemoSession();
-  for (let i = 0; i < 120 / DT && !until(session); i += 1) session.step(DT);
+function play(until: (session: LabRun) => boolean) {
+  const session = createLabSession();
+  for (let i = 0; i < 120 / DT && !until(session); i += 1) session.run.step(DT);
   return { session, store: session.store, ws: () => session.store.getState().workspace };
 }
-const reached = (signal: string) => (session: DemoSession) => session.runner.signals.has(signal);
+const reached = (signal: string) => (session: LabRun) => session.run.demo.signals.has(signal);
 
 describe("demo fixture", () => {
   it("names the same agents the world renders", () => {
-    expect(DEMO_AGENTS.map((agent) => agent.id)).toEqual([...AGENT_ORDER]);
-    for (const agent of DEMO_AGENTS) expect(agent.name).toBe(AGENTS[agent.id as keyof typeof AGENTS].name);
+    expect(TEAM_AGENTS.map((agent) => agent.id)).toEqual([...AGENT_ORDER]);
+    for (const agent of TEAM_AGENTS) expect(agent.name).toBe(AGENTS[agent.id as keyof typeof AGENTS].name);
   });
 
   it("never marks fixture facts as verified", () => {
@@ -41,7 +42,7 @@ describe("demo fixture", () => {
 
 describe("workspace record during a run", () => {
   it("accepts every operation the story proposes and never corrupts the workspace", () => {
-    const { session, ws } = play((s) => s.runner.endedAt !== null);
+    const { session, ws } = play((s) => s.run.demo.endedAt !== null);
     const history = session.bus.history();
     expect(history.filter((event) => event.type === "operation_rejected")).toEqual([]);
     expect(history.filter((event) => event.operation).length).toBeGreaterThan(30);
@@ -50,7 +51,7 @@ describe("workspace record during a run", () => {
   });
 
   it("changes the record only through operations", () => {
-    const { session } = play((s) => s.runner.endedAt !== null);
+    const { session } = play((s) => s.run.demo.endedAt !== null);
     const store = createWorkspaceStore(createUaeWorkspace());
     for (const event of session.bus.history()) applyActivityEvent(store, event, createUaeWorkspace);
     const activityOnly = store.getState().workspace;
@@ -101,10 +102,10 @@ describe("workspace record during a run", () => {
   });
 
   it("matches the world: every agent's state in the store is the state the world acts out", () => {
-    const session = createDemoSession();
+    const session = createLabSession();
     const store = session.store;
     for (let i = 0; i < 60 / DT; i += 1) {
-      session.step(DT);
+      session.run.step(DT);
       for (const id of AGENT_ORDER) expect(store.getState().workspace.agents[id]!.state).toBe(session.world.agents[id].state);
     }
   });

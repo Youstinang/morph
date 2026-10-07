@@ -1,16 +1,22 @@
-import {
-  BUDGET_ANSWER,
-  BUDGET_QUESTION,
-  DEMO_MODULES,
-  OBJECTIVE,
-  RECOMMENDATION,
-  RECOMMENDATION_REASON,
-  SCENARIO_LABELS,
-  type DemoModuleId,
-} from "@/state/fixtures/uae-market";
-import type { Action, AgentId, ModuleSpec } from "./types";
+import type { AgentState } from "@/state/domain";
+import type { TeamAgentId } from "@/state/team";
 
-export { BUDGET_ANSWER, BUDGET_QUESTION, OBJECTIVE, RECOMMENDATION, RECOMMENDATION_REASON, SCENARIO_LABELS };
+export type ArtifactKind = "evidence" | "insight" | "flag";
+
+/** Where an agent is sent: a module by id, the Intent Core, or home. */
+export type DemoTarget = { zone: string } | { core: true } | { home: true };
+
+/**
+ * One step of an agent's part in the recorded story. `waitFor` and `emit` coordinate agents through named
+ * story moments; what each moment publishes lives in the fixture's `UAE_TIMELINE`.
+ */
+export type DemoAction =
+  | { kind: "wait"; seconds: number }
+  | { kind: "waitFor"; signal: string; task?: string }
+  | { kind: "moveTo"; target: DemoTarget; task: string; state?: "moving" | "returning" | "retrying" }
+  | { kind: "hold"; seconds: number; state: AgentState; task: string; zone?: string; evidence?: number }
+  | { kind: "emit"; signal: string }
+  | { kind: "handoff"; to: TeamAgentId; artifact: ArtifactKind; signal: string; task: string };
 
 export const BUDGET_AUTO_CONFIRM_SECONDS = 3.5;
 
@@ -22,7 +28,7 @@ export const BUDGET_AUTO_CONFIRM_SECONDS = 3.5;
 const home = { home: true } as const;
 const core = { core: true } as const;
 
-export const SCRIPT: Record<AgentId, readonly Action[]> = {
+export const DEMO_SCRIPT: Record<TeamAgentId, readonly DemoAction[]> = {
   nova: [
     { kind: "wait", seconds: 1.4 },
     { kind: "moveTo", target: core, task: "reading the question" },
@@ -119,24 +125,3 @@ export const SCRIPT: Record<AgentId, readonly Action[]> = {
     { kind: "moveTo", target: home, task: "heading back", state: "returning" },
   ],
 };
-
-/** How each demo module looks: the workstation that matches its kind of work, its surface and its color. */
-const PRESENTATION: Record<DemoModuleId, Pick<ModuleSpec, "station" | "surface" | "color">> = {
-  market: { station: "console", surface: "panel", color: "#8fd0ff" },
-  competition: { station: "table", surface: "panel", color: "#8fd0ff" },
-  regulation: { station: "console", surface: "panel", color: "#8fd0ff" },
-  economics: { station: "hologram", surface: "panel", color: "#ffc27a" },
-  risk: { station: "table", surface: "panel", color: "#ff8f6b" },
-  possibility: { station: "platform", surface: "scenarios", color: "#b98cff" },
-};
-
-const FALLBACK: Pick<ModuleSpec, "station" | "surface" | "color"> = { station: "console", surface: "panel", color: "#8fd0ff" };
-
-/** Maps a module kind to its registered workstation; unknown kinds get a plain console. */
-export function presentationFor(kind: string): Pick<ModuleSpec, "station" | "surface" | "color"> {
-  return PRESENTATION[kind as DemoModuleId] ?? FALLBACK;
-}
-
-export const MODULE_CATALOG = Object.fromEntries(
-  (Object.keys(DEMO_MODULES) as DemoModuleId[]).map((id) => [id, { id, ...DEMO_MODULES[id], ...PRESENTATION[id] }]),
-) as Record<DemoModuleId, ModuleSpec>;

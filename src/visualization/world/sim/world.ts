@@ -2,7 +2,7 @@ import { agentChange } from "@/events/agents";
 import type { AgentTarget, EventDraft, WorkspaceEvent } from "@/events/schema";
 import { createModule, moduleSpot, removeModule, applyModuleChange, stepModules } from "./modules";
 import { AGENT_ORDER, CORE_RADIUS, coreSpot, homePosition } from "./roster";
-import { presentationFor } from "./script";
+import { presentationFor } from "./presentation";
 import type { AgentId, AgentRuntime, AgentState, CoreState, ModuleHeadline, ModuleId, ScenarioWeights, StoryView, Vec2, World } from "./types";
 
 export const WALK_SPEED = 3.4;

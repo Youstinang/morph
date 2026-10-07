@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ModuleGroupSchema, type ModuleGroup, type Workspace } from "./domain";
-import { DEMO_AGENTS } from "./fixtures/uae-market";
 import type { MorphOperation } from "./operations";
+import { createTeamWorkspace } from "./team";
 
 /**
  * The objective planner's output contract. A model fills it in; MORPH validates it here (on the server and
@@ -163,28 +163,5 @@ export function planToOperations(plan: Plan, prefix: string): PlanOperations {
   };
 }
 
-/** An empty workspace for a live question, with the same team as the demo. */
-export function createLiveWorkspace(id: string): Workspace {
-  const agents: Workspace["agents"] = {};
-  for (const agent of DEMO_AGENTS) agents[agent.id] = { ...agent, state: "idle", task: "ready", moduleId: null, progress: 0 };
-  return {
-    id,
-    mode: "real",
-    time: 0,
-    objective: null,
-    agentOrder: DEMO_AGENTS.map((agent) => agent.id),
-    agents,
-    tasks: [],
-    moduleOrder: [],
-    modules: {},
-    evidence: [],
-    assumptions: [],
-    scenarios: [],
-    recommendation: null,
-    humanInputs: [],
-    toolCalls: [],
-    cost: { modelCalls: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, estimatedUsd: 0 },
-    focus: null,
-    appliedOperationIds: [],
-  };
-}
+/** An empty workspace for a live question, with the standing team. */
+export const createLiveWorkspace = (id: string): Workspace => createTeamWorkspace(id, "real");

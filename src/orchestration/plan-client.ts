@@ -1,5 +1,5 @@
 import { PlanResponseSchema, type PlanResponse } from "@/state/plan";
-import type { PlanRequester } from "./sim/live-runner";
+import type { PlanRequester } from "./live-question";
 
 /** Asks the app's own `/api/plan` route; the reply is validated again here before anything uses it. */
 export const requestPlan: PlanRequester = async (objective, signal) => {

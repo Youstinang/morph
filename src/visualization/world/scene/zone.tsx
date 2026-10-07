@@ -16,7 +16,7 @@ import {
 } from "three";
 import { useReducedMotion } from "../motion";
 import { MATERIALIZE_SECONDS, moduleGrowth, modulePose, moduleScale } from "../sim/modules";
-import { SCENARIO_LABELS } from "../sim/script";
+import { SCENARIO_LABELS } from "../sim/presentation";
 import type { ModuleEmphasis, ModuleHeadline, ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
 import { moduleHeadline, scenarioWeights } from "../sim/world";
 import { geo } from "./geometry";

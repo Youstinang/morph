@@ -3,10 +3,9 @@ import type { EventDraft } from "@/events/schema";
 import type { Provenance } from "@/state/domain";
 import type { OperationGate } from "@/state/gate";
 import { PLANNER_AGENT, PlanResponseSchema, planToOperations, type PlanResponse } from "@/state/plan";
-import type { AgentId } from "./types";
 
 /**
- * Prototype live runtime for a question typed by the user: the user's question is recorded, Nova walks to
+ * Live runtime for a question typed by the user: the user's question is recorded, Nova walks to
  * the Core and plans while the real planner call is in flight, the accepted plan opens its stations and
  * sends the agents to them, and then the run honestly waits — research tools come in a later phase.
  * The plan arrives asynchronously but is acted on inside `step`, so everything happens on the run clock.
@@ -23,7 +22,7 @@ export const WAITING_SUMMARY = "The plan is ready. Live research isn't connected
 
 export type LivePhase = "starting" | "reading" | "planning" | "assigning" | "waiting" | "failed";
 
-export interface LiveRunner {
+export interface LiveQuestion {
   step(dt: number): void;
   readonly phase: LivePhase;
   readonly endedAt: null;
@@ -32,14 +31,14 @@ export interface LiveRunner {
 
 const planner: Provenance = { kind: "model", label: "Planner", agentId: PLANNER_AGENT };
 
-export function createLiveRunner(
+export function createLiveQuestion(
   bus: EventBus,
   gate: OperationGate,
   now: () => number,
   cycle: number,
   objective: string,
   requestPlan: PlanRequester,
-): LiveRunner {
+): LiveQuestion {
   const controller = new AbortController();
   const id = (name: string) => `live${cycle}-${name}`;
   let phase: LivePhase = "starting";
@@ -105,7 +104,7 @@ export function createLiveRunner(
     const task = travelling.get(event.agentId);
     if (task === undefined || event.target.kind !== "module") return;
     travelling.delete(event.agentId);
-    publish({ type: "agent_waiting", agentId: event.agentId as AgentId, task });
+    publish({ type: "agent_waiting", agentId: event.agentId, task });
   });
 
   return {

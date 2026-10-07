@@ -1,20 +1,21 @@
 import type { EventBus } from "@/events/bus";
 import type { AgentTarget, EventDraft } from "@/events/schema";
-import type { Provenance } from "@/state/domain";
+import type { AgentState, Provenance } from "@/state/domain";
 import { END_OF_RUN_WHY, HUMAN_INPUTS, UAE_TIMELINE, isOperation } from "@/state/fixtures/uae-market";
 import type { OperationGate } from "@/state/gate";
-import { AGENT_ORDER } from "./roster";
-import { BUDGET_AUTO_CONFIRM_SECONDS, SCRIPT } from "./script";
-import type { Action, AgentId, AgentState, Target } from "./types";
+import { TEAM_ORDER, type TeamAgentId } from "@/state/team";
+import { BUDGET_AUTO_CONFIRM_SECONDS, DEMO_SCRIPT, type DemoAction, type DemoTarget } from "./script";
 
 /**
- * Prototype demo runtime: plays each agent's script by publishing activity events and proposing operations
- * through the gate, and waits for the world to report arrivals and landed handoffs before moving on. It never
- * touches the world or the store directly. Phase 13 replaces it
- * with the deterministic demo runtime in the orchestration layer.
+ * Deterministic demo runtime: plays each agent's part of the recorded story by publishing activity events
+ * and proposing the fixture's operations through the gate, and waits for the world to report arrivals and
+ * landed handoffs before moving on. It never touches the world or the store directly, and uses no network,
+ * model or randomness, so the same clock always produces the same events.
  */
 
-const toTarget = (target: Target): AgentTarget =>
+type AgentId = TeamAgentId;
+
+const toTarget = (target: DemoTarget): AgentTarget =>
   "zone" in target ? { kind: "module", moduleId: target.zone } : "core" in target ? { kind: "core" } : { kind: "home" };
 
 interface Cursor {
@@ -30,7 +31,7 @@ interface Cursor {
   done: boolean;
 }
 
-export interface StoryRunner {
+export interface DemoRuntime {
   step(dt: number): void;
   /** Answers a pending human-input request; returns false if nothing is waiting for it. */
   answer(requestId: keyof typeof HUMAN_INPUTS, by: "user" | "autoplay"): boolean;
@@ -42,11 +43,11 @@ export interface StoryRunner {
 export const OBJECTIVE_AT = 0.6;
 const DISSOLVE_LEAD = 1.7;
 
-export function createStoryRunner(bus: EventBus, gate: OperationGate, now: () => number, cycle: number, restartDelay: number): StoryRunner {
+export function createDemoRuntime(bus: EventBus, gate: OperationGate, now: () => number, cycle: number, restartDelay: number): DemoRuntime {
   const signals = new Map<string, number>();
   const openModules = new Set<string>();
   const cursors = {} as Record<AgentId, Cursor>;
-  for (const id of AGENT_ORDER) {
+  for (const id of TEAM_ORDER) {
     cursors[id] = {
       index: 0,
       elapsed: 0,
@@ -91,7 +92,7 @@ export function createStoryRunner(bus: EventBus, gate: OperationGate, now: () =>
     publish(draft);
   }
 
-  function enter(id: AgentId, action: Action) {
+  function enter(id: AgentId, action: DemoAction) {
     const cursor = cursors[id];
     switch (action.kind) {
       case "moveTo": {
@@ -137,7 +138,7 @@ export function createStoryRunner(bus: EventBus, gate: OperationGate, now: () =>
 
   function run(id: AgentId, dt: number) {
     const cursor = cursors[id];
-    const script = SCRIPT[id];
+    const script = DEMO_SCRIPT[id];
     for (let guard = 0; guard < 12; guard += 1) {
       const action = script[cursor.index];
       if (!action) {
@@ -233,8 +234,8 @@ export function createStoryRunner(bus: EventBus, gate: OperationGate, now: () =>
       if (time >= OBJECTIVE_AT) emit("objective");
       const requestedAt = signals.get("budget-request");
       if (requestedAt !== undefined && time - requestedAt >= BUDGET_AUTO_CONFIRM_SECONDS) answer("budget", "autoplay");
-      for (const id of AGENT_ORDER) run(id, dt);
-      if (endedAt === null && AGENT_ORDER.every((id) => cursors[id].done)) endedAt = time;
+      for (const id of TEAM_ORDER) run(id, dt);
+      if (endedAt === null && TEAM_ORDER.every((id) => cursors[id].done)) endedAt = time;
       if (!dissolved && endedAt !== null && time - endedAt >= restartDelay - DISSOLVE_LEAD) {
         dissolved = true;
         [...openModules].forEach((moduleId, i) =>

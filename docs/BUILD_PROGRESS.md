@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 19 — Objective planner / real AI provider, moved forward by the user (authorized 2026-10-07: "build next phase pls"); complete, no visual checkpoint
+Phase 13 — Deterministic demo runtime (authorized 2026-10-07: "do what is needed then shift to next phase"); complete, no visual checkpoint
 
 ## Status
-Complete — Phase 19 is implemented and validated (it has no visual checkpoint in the specification; screenshots are recorded below). Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — Phase 13 is implemented and validated (it has no visual checkpoint; the screen is intentionally unchanged). The architecture audit due after Phases 11, 12 and 19 was done first (see Audit 2026-10-07, after Phases 11, 12 and 19). Phase 19 is complete: the user moved on after reviewing it. Phase 12 is complete: the user moved on with "build next phase pls" on 2026-10-07, recorded as approval of the morphing visuals. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -27,6 +27,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 11 — MorphOperation protocol: every change to the canonical record is a validated operation applied through `applyMorphOperation` and announced by the operation gate; development-only `/dev/operations` page.
 - Phase 12 — World morphing engine: glide, carry, replacement, morph sweep, calm mode, and the `/dev/modules` operation sandbox.
 - Phase 19 (moved forward) — Objective planner / real AI provider: "Ask a question" on `/lab` plans the user's own question with a real model and acts the plan out on the deck.
+- Phase 13 — Deterministic demo runtime: the run controller, demo runtime and live question run live in `src/orchestration` on a fixed-step clock; the 3D world attaches to the run.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -132,6 +133,13 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Cost and abuse limits: at most 2 model calls and 2000 output tokens per question, 30 s timeout, 5 questions per minute per client and 60 per hour per server process, request size limits, cancellation when the user leaves the question. Usage is recorded in the workspace's cost (`model_call_completed`) and shown in development only.
   - New events `run_waiting`, `run_failed`, `model_call_completed`; new Core state `waiting` (soft amber). Without research tools the team honestly waits at its stations after planning.
   - The user's question is never logged; the server logs only failure reasons and call counts.
+- 2026-10-07, Phase 13: no new material choice; the move into orchestration was the planned architecture. The screen is intentionally unchanged.
+  - `src/orchestration/run-controller.ts` (new): owns the bus, store, gate, clock and mode; one runtime at a time; fixed 1/60 s steps through `advance(realSeconds, speed)`, counting at most 0.1 s per frame (the scene used to keep this counter); the demo loop; stages attach with `onCycle`, `beforeStep` and `afterStep`. Without a planner connected, a live question fails with "live AI isn't connected here".
+  - `src/orchestration/demo/runtime.ts` (was `sim/runner.ts`) and `demo/script.ts` (the agents' parts, was in `sim/script.ts`). `src/orchestration/live-question.ts` (was `sim/live-runner.ts`) and `plan-client.ts` (was in the visualization folder).
+  - `src/visualization/world/sim/session.ts` now only attaches the world to a run (`attachWorld`) and declares the `LabSession` the screen drives; it imports nothing from orchestration. `sim/presentation.ts` keeps the station look registry.
+  - `src/app/lab/lab-session.ts` and `lab-client.tsx` wire the two for `/lab`; `LabExperience` receives a session factory.
+  - Audit fix: the standing team moved from the demo fixture to `src/state/team.ts`, so live questions no longer borrow it from demo data.
+  - Run-level tests moved to `src/app/lab/` (`demo-run`, `workspace-run`, `live-run`), because they need both layers; world-only tests stay in `sim/world.test.ts`.
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -233,6 +241,11 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Found and fixed: long assumptions and the questions note were clipped in the info band (shorter limits, note moved into the title, at most 2 assumptions); the "Live AI" tag was squeezed by the toolbar (moved under the Core status); at 1024 px the question wrapped into the info band (clamped to two lines, smaller below 1280 px); on phones the header grew and hid the question (labels no longer wrap, the Live tag and cost line are hidden, a shorter "Waiting for research" status).
   - `/lab` demo at 16 s, 27 s, 44 s and 62 s: unchanged apart from the new "Ask a question" button, 60 FPS.
   - Previews: `live-ask.png`, `live-planning.png`, `live-plan-waiting.png`, `live-1024.png`, `live-mobile.png`, `live-demo-unchanged-44s.png`.
+- Phase 13 deterministic demo runtime pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 126 in 16 files (7 new; all 119 earlier tests pass after the move). Production dependency audit: 0 vulnerabilities.
+  - Runtime tests (`src/orchestration/run-controller.test.ts`), with a stand-in that reports walks and handoffs instead of the 3D world: the whole story plays to the final answer under 90 s with no world and no network (a stubbed `fetch` is never called), zero refusals, zero bus rejections or listener errors, no model provenance and zero cost; with nothing reporting arrivals the story holds at Nova's first walk instead of faking progress; the first 40 s are event-for-event identical at 30, 60 and 144 frames per second, at 2× speed and with irregular frames; a stalled frame counts at most 0.1 s; a restart and the automatic loop replay the identical story; every scripted story moment exists in the timeline; a live question with no planner fails plainly.
+  - Chrome at 1440×900: `/lab` demo at 16 s, 27 s, 44 s and 62 s unchanged from the approved screens, 60 FPS, no console errors (only the three.js `Clock` notice). A live question through the new wiring: real plan, about USD 0.0006, agents waiting at their stations, 60 FPS, no errors. `/dev/modules`, `/dev/operations`, `/dev/models` and `/` load.
+  - Previews: `runtime-demo-44s.png`, `runtime-demo-62s.png`, `runtime-live-15s.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
@@ -255,7 +268,8 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Plan quality depends on the model; it is a proposal for what to investigate, never evidence.
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
-- Until Phase 13 the story runner lives in the visualization layer (`sim/runner.ts`), and story timing still lives in `sim/script.ts`. Pause and speed act on the session clock.
+- Pause stays in the screen (it stops calling the run clock); speed is passed to the run clock. There is no seek or scrub control.
+- The demo runtime still waits on the world's reports of arrivals and landed handoffs, so walking speed in the world sets story timing; headless runs need a stand-in reporter (as the tests use).
 - The event history is capped at 1000 events per session (about three demo loops).
 - `focus_camera` is recorded in the workspace and announced, but the camera doesn't follow it yet (camera direction is Phase 18).
 - `appliedOperationIds` grows for the life of a run (about 45 per demo run); it resets with the workspace on each loop.
@@ -279,13 +293,21 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: agent names exist in both `roster.ts` and the fixture (a test keeps them equal); the world casts scenario ids to the three demo keys; the module presentation registry sits in `sim/script.ts` next to the demo script. Left as is.
 - Ownership: the world no longer reads story signals; the store no longer polls the world; the HUD reads facts from the store and narration from event history. Dependencies: none added in Phase 10. Performance: unchanged, 60 FPS. Safety: events are schema-validated with length limits, unknown fields are stripped, and summaries are fixed fixture text.
 
+## Audit 2026-10-07 (after Phases 11, 12 and 19)
+- No Critical or High findings.
+- Medium, fixed in Phase 13: the demo runner, the live question runner and the plan client lived in the visualization layer; they are now in `src/orchestration`, and the visualization layer imports none of them (enforced by lint).
+- Medium, fixed in Phase 13: live questions took their team from the demo fixture (`DEMO_AGENTS`); the team is now `src/state/team.ts`.
+- Medium, open (for Phase 24, security): `/api/plan` trusts `X-Forwarded-For` for the per-client limit, so a caller can dodge that limit by faking the header; the hourly server cap (60 questions, about USD 0.05) still bounds spending. It also accepts any content type, so another website could make a visitor's browser send questions (same cap). Fix: rely on the host's client address and require JSON with a same-origin check.
+- Low: a few `as AgentId` casts on event agent ids in the demo runtime (guarded by lookups); the outdated `/dev/design-system` page. Left as is.
+- Dependencies: none added since Phase 9; production audit clean. Performance: unchanged, 60 FPS in demo and live. Secrets: the key stays server-side; browser bundles don't contain it. Demo leakage: the demo path makes no network or model calls (tested).
+
 ## Deferred Decisions
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 20: search provider.
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 13 — Deterministic demo runtime, once the user authorizes it (the specification's order resumes after the moved-forward Phase 19). An architecture audit is due first: three phases (11, 12, 19) have completed since the last one.
+Phase 14 — Agent orchestration, once the user authorizes it. It opens the deferred decision on concurrency, timeouts, retries and spend limits (and with Phase 19 done, whether live questions continue past planning).
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

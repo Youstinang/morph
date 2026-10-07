@@ -14,7 +14,7 @@ import {
   stepModules,
 } from "./modules";
 import { CORE_RADIUS } from "./roster";
-import { MODULE_CATALOG } from "./script";
+import { MODULE_CATALOG } from "./presentation";
 import type { ModuleChange, ModuleEmphasis, ModuleGroup, ModuleSpec, World } from "./types";
 import { createWorld } from "./world";
 

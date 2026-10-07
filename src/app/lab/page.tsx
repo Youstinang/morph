@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { LabExperience } from "@/visualization/world/lab-experience";
+import { LabClient } from "./lab-client";
 
 export const metadata: Metadata = {
   title: "MORPH · Lab",
 };
 
 export default function LabPage() {
-  return <LabExperience />;
+  return <LabClient />;
 }

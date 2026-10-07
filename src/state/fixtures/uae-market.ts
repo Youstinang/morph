@@ -1,6 +1,7 @@
-import type { Agent, AgentRole, ModuleGroup, Source, Workspace } from "../domain";
+import type { ModuleGroup, Source, Workspace } from "../domain";
 import type { EventDraft } from "@/events/schema";
 import type { MorphOperation } from "../operations";
+import { createTeamWorkspace } from "../team";
 
 /** Deterministic demo fixture for the flagship question. Demo data only — not live research. */
 
@@ -18,15 +19,6 @@ export const SCENARIO_LABELS = {
 } as const;
 export type ScenarioKey = keyof typeof SCENARIO_LABELS;
 
-export const DEMO_AGENTS: readonly { id: string; name: string; role: AgentRole }[] = [
-  { id: "nova", name: "Nova", role: "planner" },
-  { id: "orion", name: "Orion", role: "researcher" },
-  { id: "sage", name: "Sage", role: "analyst" },
-  { id: "brix", name: "Brix", role: "builder" },
-  { id: "vex", name: "Vex", role: "critic" },
-  { id: "lume", name: "Lume", role: "synthesizer" },
-];
-
 export const DEMO_MODULES = {
   market: { title: "Market demand", group: "research" },
   competition: { title: "Competitors", group: "research" },
@@ -40,32 +32,7 @@ export type DemoModuleId = keyof typeof DEMO_MODULES;
 const FIXTURE: Source = { kind: "fixture", label: "Demo fixture (not live research)", verified: false };
 const USER: Source = { kind: "user", label: "Your answer", verified: true };
 
-export function createUaeWorkspace(): Workspace {
-  const agents: Record<string, Agent> = {};
-  for (const agent of DEMO_AGENTS) {
-    agents[agent.id] = { ...agent, state: "idle", task: "ready", moduleId: null, progress: 0 };
-  }
-  return {
-    id: "uae-market-entry",
-    mode: "demo",
-    time: 0,
-    objective: null,
-    agentOrder: DEMO_AGENTS.map((agent) => agent.id),
-    agents,
-    tasks: [],
-    moduleOrder: [],
-    modules: {},
-    evidence: [],
-    assumptions: [],
-    scenarios: [],
-    recommendation: null,
-    humanInputs: [],
-    toolCalls: [],
-    cost: { modelCalls: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, estimatedUsd: 0 },
-    focus: null,
-    appliedOperationIds: [],
-  };
-}
+export const createUaeWorkspace = (): Workspace => createTeamWorkspace("uae-market-entry", "demo");
 
 const LEANING = "A local partner fits the budget and the slow buying cycle best.";
 const BASIS = ["ev-sales-cycle", "ev-budget", "ev-data-residency"];
