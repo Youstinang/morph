@@ -401,13 +401,20 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Low: step results are cast to their type in `live-question.ts`; each reply is validated with Zod and checked to be for the step asked, so the casts are safe at runtime. A few guarded `as AgentId` casts remain in the demo runtime. Left as is.
 - Boundaries: lint enforces that the visualization layer imports no orchestration, server or configuration code; the new Phase 15 visuals read only the world. Dependencies: none added since Phase 9; production audit clean. Performance: 58–60 FPS with the new effects; their geometry and materials are disposed on unmount. Secrets: neither key is in the production build. Demo leakage: the demo makes no network or model calls (tested).
 
+## Audit 2026-10-07 (after Phases 16–18)
+- No Critical or High findings.
+- Medium, open: `src/orchestration/live-question.ts` grew to about 635 lines with the paths step (the question desk already moved to `live-inputs.ts`). Each step's result handling is the natural piece to move out next (into a `live-results.ts`), if Phase 20 adds more there.
+- Low: `scenario_created`/`scenario_updated` carry the path's reason, risk and findings as optional fields so older event producers stay valid; the gate always fills them. About 67 type casts outside tests, mostly `as AgentId` and step-result casts after Zod checks; left as is.
+- Boundaries: the camera director lives in the visualization layer and reacts only to events; the scenario rules (accepted evidence only) live in `src/state`. Lint still enforces that the visualization layer imports no orchestration, server or configuration code.
+- Dependencies: none added since Phase 9; production audit clean. Performance: 60 FPS with the new branches and camera moves. Secrets: neither key in the build (checked in Phase 16; re-checked at the next build). Demo leakage: the demo makes no network or model calls (tested). Logging: the server logs only step names, failure reasons and call counts, never the question or answers.
+
 ## Deferred Decisions
 - Live limits: decided 2026-10-07 in Phase 14, raised in Phase 15 (4 at once, 60 s, 2 retries, 30 calls, USD 0.05). Phase 18: camera style. Phase 20: search provider.
 - AI provider/model: decided 2026-10-07 (delegated): OpenAI `gpt-5.6-luna`.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-The architecture audit due after Phases 16–18, then Phase 19 is already done, so Phase 20 — Research tools (authorized as part of the single run). The next architecture audit is due after about Phase 18.
+Phase 20 — Research tools (authorized as part of the single run; Phase 19 was done earlier). The next architecture audit is due after about Phase 18.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)
