@@ -1,0 +1,18 @@
+{
+  "name": "morph-model-tools",
+  "private": true,
+  "type": "module",
+  "description": "Offline FBX-to-GLB conversion and auto-rigging for MORPH agent and station models. Isolated from the app's dependencies.",
+  "scripts": {
+    "convert": "node convert.mjs",
+    "rig": "node rig.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "meshoptimizer": "1.3.0",
+    "sharp": "0.35.5",
+    "three": "0.186.1"
+  }
+}
