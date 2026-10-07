@@ -50,7 +50,7 @@ flowchart LR
     UI --- Store[(Workspace store, Zustand)]
     Demo[Demo timeline, offline] --> Bus[Event bus] --> Store
     Live[Live runtime] --> Bus
-    Sound[Sound, Web Audio] -.listens.- Bus
+    Sound[Sound, Web Audio + music loop] -.listens.- Bus
   end
   Live -- JSON, same-origin --> Plan[/api/plan/]
   Live -- JSON --> Step[/api/agent-step/]

@@ -1,10 +1,10 @@
 import type { Cue, Mood } from "./cues";
 
 /**
- * Room tone of the US lab on the International Space Station, recorded by Cmdr Chris Hadfield (CC0, freesound.org
- * sound 172547), trimmed and crossfaded into a seamless loop.
+ * "Cyberpunk Technology" (short version) by alexzavesa, from Pixabay; 15 bars from its steady middle, cut on the
+ * beat and crossfaded into a seamless 45 s loop, levelled to sit under the event sounds.
  */
-export const DECK_AMBIENCE_URL = "/sound/deck-ambience.m4a";
+export const DECK_MUSIC_URL = "/sound/deck-music.m4a";
 
 /** A short console tone; `glideTo` slides the pitch over its length. */
 interface Beep {
@@ -56,21 +56,21 @@ const VOICES: Record<Cue, (Beep | Hiss)[]> = {
 
 /** Overall loudness of the event sounds; they stay well under speech level. */
 const MASTER_GAIN = 0.16;
-/** The room sound sits under the event sounds. */
-const AMBIENT_GAIN = 0.3;
-/** Seconds for the room to ease from one mood to the next. */
+/** The music sits under the event sounds. */
+const MUSIC_GAIN = 0.3;
+/** Seconds for the music to ease from one mood to the next. */
 const MOOD_EASE = 1.6;
 
-/** The room, how bright it sounds, and a deeper machinery layer that only runs while the team works. */
-const MOOD_LEVELS: Record<Mood, { room: number; brightness: number; machinery: number }> = {
-  waiting: { room: 0.6, brightness: 2600, machinery: 0 },
-  working: { room: 0.8, brightness: 4500, machinery: 0.45 },
-  settled: { room: 0.55, brightness: 2200, machinery: 0 },
+/** Waiting, the music is quiet and muffled, as if from the next room; while the team works it opens up fully. */
+const MOOD_LEVELS: Record<Mood, { level: number; brightness: number }> = {
+  waiting: { level: 0.55, brightness: 900 },
+  working: { level: 0.85, brightness: 12000 },
+  settled: { level: 0.6, brightness: 2600 },
 };
 
 export interface Synth {
   play(cue: Cue): void;
-  /** Starts the room sound on first use and eases it to the team's mood. */
+  /** Starts the music on first use and eases it to the team's mood. */
   setMood(mood: Mood): void;
   resume(): void;
   /** Lets the audio engine idle while muted; the next cue wakes it. */
@@ -92,16 +92,15 @@ export function createSynth(): Synth | null {
   master.connect(tone).connect(limiter).connect(context.destination);
 
   const air = noiseBuffer(context);
-  let ambient: Ambient | null = null;
+  let music: Music | null = null;
   let loading = false;
   let mood: Mood = "waiting";
 
-  const easeTo = (target: Ambient, next: Mood) => {
+  const easeTo = (target: Music, next: Mood) => {
     const level = MOOD_LEVELS[next];
     const now = context.currentTime;
-    target.room.gain.setTargetAtTime(level.room, now, MOOD_EASE / 3);
+    target.level.gain.setTargetAtTime(level.level, now, MOOD_EASE / 3);
     target.brightness.frequency.setTargetAtTime(level.brightness, now, MOOD_EASE / 3);
-    target.machinery.gain.setTargetAtTime(level.machinery, now, MOOD_EASE / 3);
   };
 
   return {
@@ -128,12 +127,12 @@ export function createSynth(): Synth | null {
     },
     setMood(next) {
       mood = next;
-      if (ambient) easeTo(ambient, next);
+      if (music) easeTo(music, next);
       else if (!loading) {
         loading = true;
-        void loadAmbient(context, limiter)
+        void loadMusic(context, limiter)
           .then((loaded) => {
-            ambient = loaded;
+            music = loaded;
             if (loaded) easeTo(loaded, mood);
           })
           .catch(() => undefined)
@@ -180,47 +179,48 @@ function noiseBuffer(context: AudioContext) {
   return buffer;
 }
 
-interface Ambient {
-  room: GainNode;
+interface Music {
+  level: GainNode;
   brightness: BiquadFilterNode;
-  machinery: GainNode;
 }
 
-/** The recorded room loops forever; a slowed, darker copy of it is the machinery that picks up while the team works. */
-async function loadAmbient(context: AudioContext, output: AudioNode): Promise<Ambient | null> {
-  const response = await fetch(DECK_AMBIENCE_URL);
+/** Below this a sample counts as silence; encoders pad the start and end of a file with a little of it. */
+const SILENCE = 1e-4;
+
+/** Where the sound really starts and ends, so the loop doesn't hiccup on the encoder's padding. */
+function audibleSpan(buffer: AudioBuffer): { start: number; end: number } {
+  const samples = buffer.getChannelData(0);
+  let first = 0;
+  let last = samples.length - 1;
+  while (first < last && Math.abs(samples[first]!) < SILENCE) first += 1;
+  while (last > first && Math.abs(samples[last]!) < SILENCE) last -= 1;
+  return { start: first / buffer.sampleRate, end: (last + 1) / buffer.sampleRate };
+}
+
+/** The music loops forever; the mood only changes its level and how muffled it sounds. */
+async function loadMusic(context: AudioContext, output: AudioNode): Promise<Music | null> {
+  const response = await fetch(DECK_MUSIC_URL);
   if (!response.ok) return null;
-  const recording = await context.decodeAudioData(await response.arrayBuffer());
+  const track = await context.decodeAudioData(await response.arrayBuffer());
   if (context.state === "closed") return null;
 
-  const ambient = context.createGain();
-  ambient.gain.value = AMBIENT_GAIN;
-  ambient.connect(output);
-
-  const loop = (rate: number, offset: number, into: AudioNode) => {
-    const source = context.createBufferSource();
-    source.buffer = recording;
-    source.loop = true;
-    source.playbackRate.value = rate;
-    source.connect(into);
-    source.start(0, offset);
-  };
-
-  const room = context.createGain();
-  room.gain.value = 0;
+  const level = context.createGain();
+  level.gain.value = 0;
   const brightness = context.createBiquadFilter();
   brightness.type = "lowpass";
   brightness.frequency.value = MOOD_LEVELS.waiting.brightness;
-  brightness.connect(room).connect(ambient);
-  loop(1, 0, brightness);
+  const master = context.createGain();
+  master.gain.value = MUSIC_GAIN;
+  brightness.connect(level).connect(master).connect(output);
 
-  const machinery = context.createGain();
-  machinery.gain.value = 0;
-  const rumble = context.createBiquadFilter();
-  rumble.type = "lowpass";
-  rumble.frequency.value = 520;
-  rumble.connect(machinery).connect(ambient);
-  loop(0.62, recording.duration / 2, rumble);
+  const span = audibleSpan(track);
+  const source = context.createBufferSource();
+  source.buffer = track;
+  source.loop = true;
+  source.loopStart = span.start;
+  source.loopEnd = span.end;
+  source.connect(brightness);
+  source.start(0, span.start);
 
-  return { room, brightness, machinery };
+  return { level, brightness };
 }

@@ -6,8 +6,8 @@ import { createCuePlanner, type Mood, moodAfter } from "./cues";
 import { createSynth, type Synth } from "./synth";
 
 /**
- * Sound starts muted; the first click on the toggle creates the audio engine, as browsers require. Once on, the recorded
- * station room sound follows the team (waiting, at work, settled on the answer) under the short event cues.
+ * Sound starts muted; the first click on the toggle creates the audio engine, as browsers require. Once on, the background
+ * music follows the team (waiting, at work, settled on the answer) under the short event cues.
  */
 export function useSound(bus: EventBus) {
   const synth = useRef<Synth | null>(null);
