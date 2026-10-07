@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 8 — Spatial modules (authorized 2026-10-07: "okay now we move with the plan")
+Phase 8 — Spatial modules (authorized 2026-10-07: "okay now we move with the plan"); complete
 
 ## Status
-In Progress — implemented and validated; awaiting the user's visual approval. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — the user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -21,6 +21,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 2 — Application scaffold.
 - Phase 3 — HUD, delivered as the guided-story, clear-lane HUD over the 3D world.
 - Phases 4–7 — Orbital command deck, Intent Core, rigged agent characters, and the six-agent flagship choreography in `/lab`.
+- Phase 8 — Spatial modules with the grouped-neighborhood layout.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -171,12 +172,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - No findings for secrets, provider leakage or arbitrary code execution: there are no providers or AI calls yet.
 
 ## Deferred Decisions
-- Visual approval of Phase 8 (spatial modules), or requested revisions. Phase 9: store design and state contracts. Phases 10–11: event and operation contracts.
+- Phase 9: store design and state contracts. Phases 10–11: event and operation contracts.
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 19: AI provider/model. Phase 20: search provider.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Awaiting the user's visual approval of Phase 8. Once approved, Phase 9 — Workspace domain state (store design decision first) can be authorized. Phase 9 is not authorized yet.
+Phase 9 — Workspace domain state, once the user authorizes it. It starts with the store-design decision gate. Phase 9 is not authorized yet.
 
 ## Last Updated
 2026-10-07 11:20 (Asia/Dubai)
