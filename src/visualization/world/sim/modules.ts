@@ -108,6 +108,12 @@ export function applyModuleChange(world: World, change: ModuleChange): void {
     case "resize":
       mod.size = Math.min(SIZE_RANGE[1], Math.max(SIZE_RANGE[0], change.size));
       break;
+    case "move":
+      mod.spec = { ...mod.spec, group: change.group };
+      break;
+    case "retitle":
+      mod.spec = { ...mod.spec, title: change.title };
+      return;
   }
   relayout(world);
 }

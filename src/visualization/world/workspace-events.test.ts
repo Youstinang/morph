@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyWorkspaceEvent, connectWorkspace } from "@/state/apply-event";
+import { applyActivityEvent } from "@/state/apply-event";
 import { WorkspaceSchema } from "@/state/domain";
-import { DEMO_AGENTS, UAE_TIMELINE, createUaeWorkspace } from "@/state/fixtures/uae-market";
+import { DEMO_AGENTS, UAE_TIMELINE, createUaeWorkspace, isOperation } from "@/state/fixtures/uae-market";
+import { SIGNIFICANT, applyMorphOperation } from "@/state/operations";
 import { findingLines } from "@/state/selectors";
 import { createWorkspaceStore } from "@/state/store";
 import { AGENTS, AGENT_ORDER } from "./sim/roster";
@@ -12,10 +13,8 @@ const DT = 1 / 60;
 
 function play(until: (session: DemoSession) => boolean) {
   const session = createDemoSession();
-  const store = createWorkspaceStore(createUaeWorkspace());
-  connectWorkspace(session.bus, store, createUaeWorkspace);
   for (let i = 0; i < 120 / DT && !until(session); i += 1) session.step(DT);
-  return { session, store, ws: () => store.getState().workspace };
+  return { session, store: session.store, ws: () => session.store.getState().workspace };
 }
 const reached = (signal: string) => (session: DemoSession) => session.runner.signals.has(signal);
 
@@ -27,18 +26,38 @@ describe("demo fixture", () => {
 
   it("never marks fixture facts as verified", () => {
     for (const beat of Object.values(UAE_TIMELINE)) {
-      for (const draft of beat.events) {
-        if (draft.type === "evidence_discovered" && draft.evidence.source.kind !== "user") expect(draft.evidence.source.verified).toBe(false);
+      for (const item of beat.items) {
+        if (isOperation(item) && item.operation === "add_evidence" && item.evidence.source.kind !== "user") expect(item.evidence.source.verified).toBe(false);
       }
+    }
+  });
+
+  it("explains every significant change it proposes", () => {
+    for (const beat of Object.values(UAE_TIMELINE)) {
+      for (const item of beat.items) if (isOperation(item) && SIGNIFICANT.has(item.operation)) expect(item.why?.reason).toBeTruthy();
     }
   });
 });
 
-describe("workspace store fed by events", () => {
-  it("applies every event of a full run without corrupting the workspace", () => {
+describe("workspace record during a run", () => {
+  it("accepts every operation the story proposes and never corrupts the workspace", () => {
     const { session, ws } = play((s) => s.runner.endedAt !== null);
+    const history = session.bus.history();
+    expect(history.filter((event) => event.type === "operation_rejected")).toEqual([]);
+    expect(history.filter((event) => event.operation).length).toBeGreaterThan(30);
     expect(session.bus.stats()).toMatchObject({ rejected: 0, listenerErrors: 0 });
     expect(WorkspaceSchema.safeParse(ws()).success).toBe(true);
+  });
+
+  it("changes the record only through operations", () => {
+    const { session } = play((s) => s.runner.endedAt !== null);
+    const store = createWorkspaceStore(createUaeWorkspace());
+    for (const event of session.bus.history()) applyActivityEvent(store, event, createUaeWorkspace);
+    const activityOnly = store.getState().workspace;
+    expect(activityOnly.evidence).toEqual([]);
+    expect(activityOnly.moduleOrder).toEqual([]);
+    expect(activityOnly.objective).toBeNull();
+    expect(activityOnly.recommendation).toBeNull();
   });
 
   it("ends with the answer, every module, and per-agent task history", () => {
@@ -83,8 +102,7 @@ describe("workspace store fed by events", () => {
 
   it("matches the world: every agent's state in the store is the state the world acts out", () => {
     const session = createDemoSession();
-    const store = createWorkspaceStore(createUaeWorkspace());
-    connectWorkspace(session.bus, store, createUaeWorkspace);
+    const store = session.store;
     for (let i = 0; i < 60 / DT; i += 1) {
       session.step(DT);
       for (const id of AGENT_ORDER) expect(store.getState().workspace.agents[id]!.state).toBe(session.world.agents[id].state);
@@ -100,12 +118,16 @@ describe("workspace store fed by events", () => {
     expect(looped.objective).toBeNull();
   });
 
-  it("refuses events that reference things that don't exist", () => {
+  it("ignores activity for agents that don't exist", () => {
     const store = createWorkspaceStore(createUaeWorkspace());
     const base = { seq: 1, at: 1, cycle: 0, source: "demo" as const };
-    expect(applyWorkspaceEvent(store, { ...base, type: "assumption_challenged", assumptionId: "nope", by: "vex", note: "x" }, createUaeWorkspace)).toBe(false);
-    expect(applyWorkspaceEvent(store, { ...base, type: "agent_idle", agentId: "ghost", task: "x" }, createUaeWorkspace)).toBe(false);
-    expect(applyWorkspaceEvent(store, { ...base, type: "human_input_received", requestId: "budget", answer: "1", answeredBy: "user" }, createUaeWorkspace)).toBe(false);
+    expect(applyActivityEvent(store, { ...base, type: "agent_idle", agentId: "ghost", task: "x" }, createUaeWorkspace)).toBe(false);
+  });
+
+  it("refuses a model's attempt to answer the budget question mid-run", () => {
+    const { ws } = play(reached("budget-request"));
+    const forged = applyMorphOperation(ws(), { operation: "answer_human_input", id: "forged", source: { kind: "model" }, requestId: "budget", answer: "USD 1" });
+    expect(forged).toMatchObject({ ok: false });
   });
 });
 

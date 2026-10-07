@@ -1,13 +1,16 @@
 import type { EventBus } from "@/events/bus";
 import type { AgentTarget, EventDraft } from "@/events/schema";
-import { HUMAN_INPUTS, UAE_TIMELINE } from "@/state/fixtures/uae-market";
+import type { Provenance } from "@/state/domain";
+import { END_OF_RUN_WHY, HUMAN_INPUTS, UAE_TIMELINE, isOperation } from "@/state/fixtures/uae-market";
+import type { OperationGate } from "@/state/gate";
 import { AGENT_ORDER } from "./roster";
 import { BUDGET_AUTO_CONFIRM_SECONDS, SCRIPT } from "./script";
 import type { Action, AgentId, AgentState, Target } from "./types";
 
 /**
- * Prototype demo runtime: plays each agent's script by publishing events, and waits for the world to report
- * arrivals and landed handoffs before moving on. It never touches the world directly. Phase 13 replaces it
+ * Prototype demo runtime: plays each agent's script by publishing activity events and proposing operations
+ * through the gate, and waits for the world to report arrivals and landed handoffs before moving on. It never
+ * touches the world or the store directly. Phase 13 replaces it
  * with the deterministic demo runtime in the orchestration layer.
  */
 
@@ -39,7 +42,7 @@ export interface StoryRunner {
 export const OBJECTIVE_AT = 0.6;
 const DISSOLVE_LEAD = 1.7;
 
-export function createStoryRunner(bus: EventBus, now: () => number, cycle: number, restartDelay: number): StoryRunner {
+export function createStoryRunner(bus: EventBus, gate: OperationGate, now: () => number, cycle: number, restartDelay: number): StoryRunner {
   const signals = new Map<string, number>();
   const openModules = new Set<string>();
   const cursors = {} as Record<AgentId, Cursor>;
@@ -59,18 +62,26 @@ export function createStoryRunner(bus: EventBus, now: () => number, cycle: numbe
   let endedAt: number | null = null;
   let dissolved = false;
 
-  const publish = (draft: EventDraft, source: "demo" | "user" = "demo") => {
-    bus.publish(draft, source);
-    if (draft.type === "module_reserved" || draft.type === "module_created") openModules.add(draft.module.id);
-    if (draft.type === "module_removed") openModules.delete(draft.moduleId);
-  };
+  const publish = (draft: EventDraft, source: "demo" | "user" = "demo") => bus.publish(draft, source);
+
+  function propose(operation: Record<string, unknown> & { operation: string }, as: Provenance, summary?: string) {
+    const result = gate.submit(operation, summary ? { as, summary } : { as });
+    if (result.ok && result.operation.operation === "add_module") openModules.add(result.operation.module.id);
+    if (result.ok && result.operation.operation === "remove_module") openModules.delete(result.operation.moduleId);
+    return result.ok;
+  }
 
   function emit(signal: string) {
     if (signals.has(signal)) return;
     signals.set(signal, now());
     const beat = UAE_TIMELINE[signal];
     if (!beat) return;
-    beat.events.forEach((draft, i) => publish(i === 0 && beat.summary ? { ...draft, summary: beat.summary } : draft, beat.source === "user" ? "user" : "demo"));
+    const as: Provenance = beat.user ? { kind: "user" } : beat.by ? { kind: "demo", agentId: beat.by } : { kind: "demo" };
+    beat.items.forEach((item, i) => {
+      const summary = i === 0 ? beat.summary : undefined;
+      if (isOperation(item)) propose({ ...item, id: `c${cycle}-${signal}-${i}` }, as, summary);
+      else publish(summary ? { ...item, summary } : item, beat.user ? "user" : "demo");
+    });
   }
 
   function show(id: AgentId, draft: EventDraft & { task: string }, state: AgentState) {
@@ -210,10 +221,8 @@ export function createStoryRunner(bus: EventBus, now: () => number, cycle: numbe
   function answer(requestId: keyof typeof HUMAN_INPUTS, by: "user" | "autoplay") {
     if (!signals.has(`${requestId}-request`) || signals.has(requestId)) return false;
     const input = HUMAN_INPUTS[requestId];
-    publish(
-      { type: "human_input_received", requestId, answer: input.answer, answeredBy: by, summary: input.answeredSummary },
-      by === "user" ? "user" : "demo",
-    );
+    const as: Provenance = by === "user" ? { kind: "user" } : { kind: "demo", label: "autoplay" };
+    if (!propose({ operation: "answer_human_input", id: `c${cycle}-${requestId}-answer`, requestId, answer: input.answer }, as, input.answeredSummary)) return false;
     emit(requestId);
     return true;
   }
@@ -228,7 +237,9 @@ export function createStoryRunner(bus: EventBus, now: () => number, cycle: numbe
       if (endedAt === null && AGENT_ORDER.every((id) => cursors[id].done)) endedAt = time;
       if (!dissolved && endedAt !== null && time - endedAt >= restartDelay - DISSOLVE_LEAD) {
         dissolved = true;
-        for (const moduleId of [...openModules]) publish({ type: "module_removed", moduleId });
+        [...openModules].forEach((moduleId, i) =>
+          propose({ operation: "remove_module", id: `c${cycle}-end-${i}`, moduleId, why: END_OF_RUN_WHY }, { kind: "demo" }),
+        );
       }
     },
     answer,

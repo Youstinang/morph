@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceSchema, type NewEvidence } from "./domain";
+import { WorkspaceSchema } from "./domain";
 import { createUaeWorkspace } from "./fixtures/uae-market";
+import type { MorphOperation } from "./operations";
 import { findingLines, selectAgents, selectPendingInput } from "./selectors";
 import { createWorkspaceStore } from "./store";
 
+const demo = { kind: "demo" } as const;
 const source = { kind: "fixture", label: "Test fixture", verified: false } as const;
-const evidence = (id: string, moduleId: string | null = null): NewEvidence => ({
-  id,
-  statement: `Statement ${id}`,
-  kind: "fact",
-  moduleId,
-  foundBy: "orion",
-  source,
+let n = 0;
+const evidence = (id: string, kind: "fact" | "risk" = "fact"): MorphOperation => ({
+  operation: "add_evidence",
+  id: `op-${++n}`,
+  source: demo,
+  evidence: { id, statement: `Statement ${id}`, kind, moduleId: null, foundBy: "orion", source },
 });
+const op = (operation: Record<string, unknown>) => ({ id: `op-${++n}`, source: demo, ...operation });
 
 function setup() {
   const store = createWorkspaceStore(createUaeWorkspace());
@@ -37,7 +39,6 @@ describe("workspace store", () => {
     const before = s().workspace;
     expect(s().updateAgent("orion", { state: "working", task: "checking demand" })).toBe(true);
     const after = s().workspace;
-    expect(after).not.toBe(before);
     expect(after.agents.orion).not.toBe(before.agents.orion);
     expect(after.agents.nova).toBe(before.agents.nova);
     expect(before.agents.orion!.state).toBe("idle");
@@ -55,7 +56,7 @@ describe("workspace store", () => {
 
   it("tracks a task lifecycle per agent", () => {
     const { s } = setup();
-    s().openModule({ id: "market", title: "Market demand", kind: "market", group: "research", emphasis: "normal", collapsed: false, size: 1 });
+    s().apply(op({ operation: "add_module", module: { id: "market", title: "Market demand", kind: "market", group: "research" }, why: { reason: "r" } }));
     s().setTime(5);
     expect(s().startTask("orion", "checking demand", "market")).toBe(true);
     s().setTime(8);
@@ -69,64 +70,23 @@ describe("workspace store", () => {
     ]);
   });
 
-  it("reserves, opens, updates and removes modules", () => {
+  it("changes the record only through operations, and a refused one changes nothing", () => {
     const { s } = setup();
-    const spec = { id: "risk", title: "Risks", kind: "risk", group: "analysis", emphasis: "normal", collapsed: false, size: 1 } as const;
-    expect(s().openModule({ ...spec, reserved: true })).toBe(true);
-    expect(s().workspace.modules.risk!.status).toBe("reserved");
-    s().setTime(3);
-    expect(s().openModule(spec)).toBe(true);
-    expect(s().workspace.modules.risk).toMatchObject({ status: "open", openedAt: 3 });
-    expect(s().openModule(spec)).toBe(false);
-    expect(s().updateModule("risk", { size: 3 })).toBe(false);
-    expect(s().updateModule("risk", { emphasis: "emphasized" })).toBe(true);
-    expect(s().removeModule("risk")).toBe(true);
-    expect(s().workspace.moduleOrder).toEqual([]);
-  });
-
-  it("keeps evidence provenance-bearing and refuses dangling references", () => {
-    const { s } = setup();
-    expect(s().addEvidence(evidence("a"))).toBe(true);
-    expect(s().addEvidence(evidence("a"))).toBe(false);
-    expect(s().addEvidence(evidence("b", "missing-module"))).toBe(false);
-    expect(s().addEvidence({ ...evidence("c"), source: { kind: "model", label: "", verified: false } })).toBe(false);
-    expect(s().supersedeEvidence("a", "missing")).toBe(false);
-    expect(s().addEvidence(evidence("d"))).toBe(true);
-    expect(s().supersedeEvidence("a", "d")).toBe(true);
-    expect(s().workspace.evidence[0]).toMatchObject({ status: "superseded", supersededBy: "d" });
-    expect(
-      s().setRecommendation({ status: "final", leaning: "x", statement: "y", reason: "z", confidence: "moderate", evidenceIds: ["nope"] }),
-    ).toBe(false);
-  });
-
-  it("moves assumptions through open, challenged and resolved only in order", () => {
-    const { s } = setup();
-    s().addEvidence(evidence("proof"));
-    expect(s().raiseAssumption("fast", "Deals close fast.", "sage")).toBe(true);
-    expect(s().resolveAssumption("fast", "rejected", "missing")).toBe(false);
-    expect(s().challengeAssumption("fast", "vex", "No proof.")).toBe(true);
-    expect(s().challengeAssumption("fast", "vex", "Again.")).toBe(false);
-    expect(s().resolveAssumption("fast", "rejected", "proof")).toBe(true);
-    expect(s().resolveAssumption("fast", "confirmed", null)).toBe(false);
+    const before = s().workspace;
+    const refused = s().apply(op({ operation: "remove_module", moduleId: "ghost", why: { reason: "r" } }));
+    expect(refused).toMatchObject({ ok: false, reason: "module ghost does not exist" });
+    expect(s().workspace).toBe(before);
+    expect(s().apply(evidence("a")).ok).toBe(true);
+    expect(s().workspace.agents).toBe(before.agents);
   });
 
   it("handles a human-input request and answer once", () => {
     const { s } = setup();
-    expect(s().requestHumanInput("budget", "How much?", "nova")).toBe(true);
+    expect(s().apply(op({ operation: "request_human_input", requestId: "budget", question: "How much?", askedBy: "nova" })).ok).toBe(true);
     expect(selectPendingInput(s().workspace)?.id).toBe("budget");
-    expect(s().answerHumanInput("budget", "")).toBe(false);
-    expect(s().answerHumanInput("budget", "USD 1")).toBe(true);
-    expect(s().answerHumanInput("budget", "USD 2")).toBe(false);
+    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", answer: "USD 1", source: { kind: "user" } })).ok).toBe(true);
+    expect(s().apply(op({ operation: "answer_human_input", requestId: "budget", answer: "USD 2", source: { kind: "user" } })).ok).toBe(false);
     expect(selectPendingInput(s().workspace)).toBeNull();
-  });
-
-  it("only accepts scenario assessments between 0 and 1 and skips unchanged updates", () => {
-    const { s } = setup();
-    expect(s().setScenarios([{ id: "a", label: "A", assessment: 1.4 }])).toBe(false);
-    expect(s().setScenarios([{ id: "a", label: "A", assessment: 0.4 }])).toBe(true);
-    const before = s().workspace;
-    expect(s().setScenarios([{ id: "a", label: "A", assessment: 0.4 }])).toBe(false);
-    expect(s().workspace).toBe(before);
   });
 });
 
@@ -134,13 +94,13 @@ describe("finding lines", () => {
   it("lists live facts and doubts oldest first, without superseded or resolved ones", () => {
     const { s } = setup();
     s().setTime(1);
-    s().addEvidence(evidence("old"));
+    s().apply(evidence("old"));
     s().setTime(2);
-    s().raiseAssumption("fast", "Deals close fast.", "sage");
+    s().apply(op({ operation: "add_assumption", assumptionId: "fast", statement: "Deals close fast.", raisedBy: "sage" }));
     s().setTime(3);
-    s().challengeAssumption("fast", "vex", "No proof.");
+    s().apply(op({ operation: "challenge_assumption", assumptionId: "fast", by: "vex", note: "No proof." }));
     s().setTime(3.5);
-    s().addEvidence({ ...evidence("risk"), kind: "risk" });
+    s().apply(evidence("risk", "risk"));
     let ws = s().workspace;
     expect(findingLines(ws.evidence, ws.assumptions, ws.recommendation).map((line) => [line.kind, line.text])).toEqual([
       ["fact", "Statement old"],
@@ -149,13 +109,10 @@ describe("finding lines", () => {
       ["doubt", "Statement risk"],
     ]);
     s().setTime(4);
-    s().addEvidence(evidence("new"));
-    s().supersedeEvidence("old", "new");
-    s().resolveAssumption("fast", "rejected", "new");
+    s().apply(evidence("new"));
+    s().apply(op({ operation: "remove_evidence", evidenceId: "old", supersededBy: "new", why: { reason: "r" } }));
+    s().apply(op({ operation: "update_assumption", assumptionId: "fast", status: "rejected", evidenceId: "new" }));
     ws = s().workspace;
-    expect(findingLines(ws.evidence, ws.assumptions, ws.recommendation).map((line) => line.text)).toEqual([
-      "Statement risk",
-      "Statement new",
-    ]);
+    expect(findingLines(ws.evidence, ws.assumptions, ws.recommendation).map((line) => line.text)).toEqual(["Statement risk", "Statement new"]);
   });
 });

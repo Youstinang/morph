@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 10 — Typed event system (authorized 2026-10-07: "continue"); complete
+Phase 11 — MorphOperation protocol (authorized 2026-10-07: "ok continue"); complete
 
 ## Status
-Complete — Phase 10 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and the world now acts only on events). The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Complete — Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -24,6 +24,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Phase 8 — Spatial modules with the grouped-neighborhood layout.
 - Phase 9 — Workspace domain state: Zod schemas, a Zustand store, selectors, and the demo fixture; the HUD reads from the store.
 - Phase 10 — Typed event system: `WorkspaceEvent` contract and in-memory bus; the 3D world, the store and the steps list all run on events.
+- Phase 11 — MorphOperation protocol: every change to the canonical record is a validated operation applied through `applyMorphOperation` and announced by the operation gate; development-only `/dev/operations` page.
 
 ## Key Architecture Decisions
 - 2026-10-06: `docs/MASTER_PROMPT.md` is the primary specification; `MORPH_CODEX_MASTER_v2.md` governs only where it is silent.
@@ -82,7 +83,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - The layout engine is deterministic: neighborhoods centred on anchors, move outward first, then shrink, and never overlap. Details are in `VISUAL_SYSTEM.md`, Adaptive analysis zones.
   - `ZoneId`, `ZONES` and `ZONE_ORDER` were removed. Module ids are open strings, and the demo catalog, story-driven module changes and panel headlines live in `sim/script.ts`.
   - Bays, service arms and Core light-tracks moved out of the static station into each module's rig. The cargo pod targets live module positions.
-  - `ModuleChange` is the prototype precursor of `MorphOperation`. Phase 11 replaces it with Zod-validated operations through `applyMorphOperation`.
+  - `ModuleChange` is the prototype precursor of `MorphOperation`. Since Phase 11 it is only the world's internal visual change, driven by the events of accepted operations.
   - The demo story and timing are unchanged. Its later modules are reserved when the discovery fires, so they open in their final spots.
 - 2026-10-07, Phase 9: the user delegated the store choice ("use your recommendation"), so **Zustand 5.0.15** was added (exact-pinned; small, no providers needed outside React, works with React 19.3; production audit clean). The user chose the **split** boundary: the store holds the facts, and the 3D world keeps motion (positions, routes, timing).
   - `src/state/domain.ts`: Zod schemas and types for the workspace — objective, agents (13 states), tasks, modules, evidence with source provenance, assumptions, scenarios (model-generated assessments 0–1, not probabilities), recommendation, human-input requests, tool calls and cost. Fixture sources are marked unverified; only the user's own answer counts as verified.
@@ -102,6 +103,15 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - The steps list and caption are narrated from the event history (`narration.ts`). The budget autoplay answer is recorded as `source: "demo"`, `answeredBy: "autoplay"`; a click on Confirm is `source: "user"`.
   - A new instant `planning` story moment publishes `planning_started`.
   - Timing compared with the Phase 9 code: the same order of story moments, each at most 0.17 s later over the 58.7 s story (one frame per arrival).
+- 2026-10-07, Phase 11: the user chose **"record"**: every change to the record goes through the checker, the world reacts only to accepted changes, agent activity (walk, arrive, work) stays as plain events, plus a development-only page for sending broken, AI-style requests. See `EVENT_MODEL.md`, Operations.
+  - `src/state/operations.ts`: `MorphOperationSchema`, a strict Zod union of 21 operations (the specification's 18 plus `set_objective`, `update_objective`, `answer_human_input`), each with an id, provenance and an optional reason; `applyMorphOperation` is pure and refuses non-data, oversized, unknown, malformed, repeated, unexplained-significant, dangling, out-of-order and trust-violating proposals with a reason.
+  - `src/state/transitions.ts`: the pure record transitions, shared by operations and the store's activity actions.
+  - `src/state/gate.ts`: `createOperationGate` stamps the trusted channel's provenance over any claimed source (fixing a gap found during implementation where a proposal could claim to be the user), applies through the store, and publishes record events carrying the operation reference, or `operation_rejected`.
+  - The store's record mutators were replaced by `apply(operation)`; agent activity keeps `updateAgent`, `startTask`, `finishTask`. `applyWorkspaceEvent` became `applyActivityEvent`.
+  - The bus refuses record events without an operation reference and other events with one. New events: `objective_updated`, `module_moved`, `module_resized`, `evidence_removed`, `task_assigned`, `camera_focus_requested`, `operation_rejected`. `module_updated` carries `changes`; scenario events carry one scenario.
+  - Domain additions: module `summary` (the panel headline), workspace `focus` and `appliedOperationIds`, `ProvenanceSchema`, `WhySchema`, `FocusSchema`.
+  - The demo's `UAE_TIMELINE` beats now hold items: activity events and operations; every significant demo operation has a reason. The runner proposes operations through the gate (as the user for the user's question and budget answer, otherwise as the demo with the acting agent), and the end-of-run dissolve is `remove_module` with a reason. The session owns the one store the HUD reads.
+  - The world reacts to `module_moved` and `module_resized` (new `move` and `retitle` module changes).
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -175,6 +185,14 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Store tests: a full run with zero rejected events and zero listener errors validates; findings match the approved HUD line for line; the store's agent states equal the world's at every frame for 60 s; determinism and loop reset; events referencing unknown things are refused; the steps list uses only the current run's history.
   - Chrome at 1440×900 at 16 s, 27 s, 44 s and 62 s: unchanged from the approved screens, 60 FPS. Show steps, Confirm and Restart checked live. Console shows only the known favicon 404 and three.js `Clock` notice.
   - Previews: `events-handoff-16s.png`, `events-critic-44s.png`, `events-answer-62s.png`, `events-steps-budget.png`.
+- Phase 11 MorphOperation pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 87 in 9 files (20 new operation and gate tests; store, bus, world and run tests ported to operations).
+  - Operation tests: the specification's operations present; deterministic application leaving the input untouched; repeated ids; malformed, unknown, oversized and non-data input refused without throwing; extra fields (a script, a component) refused; markup kept as plain text; significant changes without a reason; dangling references; a model marking its own claim verified, supplying user evidence, setting the objective or answering for the user; module move, resize and emphasis steps; reserve then open and summary; the assumption lifecycle and protected evidence; recommendation citing superseded evidence or incomplete; scenario range; task assignment and camera focus; 2000 random proposals never corrupt the workspace.
+  - Gate tests: accepted operations announced with their reference and reason; refusals announced and changing nothing; a forged user source overridden by the trusted channel; record events without an operation refused by the bus.
+  - Run tests: a full run has zero refusals, more than 30 operation-backed events, zero bus rejections and a valid workspace; replaying only activity events leaves the record empty (the record changes only through operations); findings still match the approved HUD line for line; store and world agent states agree every frame; determinism and loop reset.
+  - Chrome at 1440×900 at 16 s, 27 s, 44 s and 62 s: unchanged from the approved screens, 60 FPS. Show steps, Confirm and Restart checked live. Console shows only the known favicon 404 and three.js `Clock` notice.
+  - `/dev/operations` checked live: as the AI model, all nine broken requests were refused with reasons (missing reason, unknown command, smuggled script, self-verified claim, posing as the user, answering for the user, missing station, repeated id, oversized), a pasted sentence was refused, and the user's own answer was accepted; the record and the world's station list changed only on acceptance.
+  - Previews: `operations-checker.png`, `operations-lab-44s.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
 - Not yet verified: reduced-motion behavior for the 3D scene (no 3D reduced-motion handling yet), Three.js memory over long sessions, and Safari/Firefox.
@@ -192,6 +210,8 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - No favicon (404 in console).
 - Until Phase 13 the story runner lives in the visualization layer (`sim/runner.ts`), and story timing still lives in `sim/script.ts`. Pause and speed act on the session clock.
 - The event history is capped at 1000 events per session (about three demo loops).
+- `focus_camera` is recorded in the workspace and announced, but the camera doesn't follow it yet (camera direction is Phase 18).
+- `appliedOperationIds` grows for the life of a run (about 45 per demo run); it resets with the workspace on each loop.
 - Development-only npm audit entries in the eslint-config-next → braces chain remain (production audit clean). ESLint 9 is deprecated upstream but required by Next.js plugin peers.
 - The default shell Node is v12; use `nvm use` (Node 24) before project scripts.
 - The secondary specification lives outside the repository at `/Users/youstina/Downloads/MORPH_CODEX_MASTER_v2.md`.
@@ -208,17 +228,16 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 ## Audit 2026-10-07 (after Phases 8–10)
 - No Critical or High findings.
 - Medium, scheduled: the prototype story runner (`sim/runner.ts`) and the story script are demo orchestration living in the visualization layer. They are isolated behind the bus, and Phase 13 moves them into `src/orchestration` as the demo runtime.
-- Medium, scheduled: events update the store directly through `applyWorkspaceEvent`. Phase 11 puts the state-changing part behind validated `MorphOperation`s.
+- Medium, fixed in Phase 11: events updated the store directly through `applyWorkspaceEvent`; record changes now go through validated `MorphOperation`s.
 - Low: agent names exist in both `roster.ts` and the fixture (a test keeps them equal); the world casts scenario ids to the three demo keys; the module presentation registry sits in `sim/script.ts` next to the demo script. Left as is.
 - Ownership: the world no longer reads story signals; the store no longer polls the world; the HUD reads facts from the store and narration from event history. Dependencies: none added in Phase 10. Performance: unchanged, 60 FPS. Safety: events are schema-validated with length limits, unknown fields are stripped, and summaries are fixed fixture text.
 
 ## Deferred Decisions
-- Phase 11: operation contract.
 - Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 19: AI provider/model. Phase 20: search provider.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 11 — MorphOperation protocol, once the user authorizes it. It starts with the operation-contract decision gate. Phase 11 is not authorized yet.
+Phase 12 — World morphing engine, once the user authorizes it. It has a visual approval checkpoint. Phase 12 is not authorized yet.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

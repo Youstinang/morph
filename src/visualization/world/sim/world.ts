@@ -81,7 +81,8 @@ export function planRoute(from: Vec2, to: Vec2): [number, number][] {
 
 /**
  * The world's reaction to one event. This is the only way story facts reach the world; everything else it
- * does is animation toward what it has been told.
+ * does is animation toward what it has been told. Record events reach it only after the operation gate
+ * accepted the operation behind them.
  */
 export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldReport): void {
   const change = agentChange(event);
@@ -139,9 +140,19 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
     }
     case "module_updated": {
       const mod = world.modules[event.moduleId];
-      if (mod) mod.headline = { headline: event.headline, detail: event.detail };
+      if (!mod) return;
+      const { summary, collapsed, title } = event.changes;
+      if (summary !== undefined) mod.headline = summary;
+      if (title !== undefined) applyModuleChange(world, { op: "retitle", id: event.moduleId, title });
+      if (collapsed !== undefined) applyModuleChange(world, { op: "collapse", id: event.moduleId, collapsed });
       return;
     }
+    case "module_moved":
+      applyModuleChange(world, { op: "move", id: event.moduleId, group: event.group });
+      return;
+    case "module_resized":
+      applyModuleChange(world, { op: "resize", id: event.moduleId, size: event.size });
+      return;
     case "module_emphasized":
       applyModuleChange(world, { op: "emphasize", id: event.moduleId, emphasis: event.emphasis });
       return;
@@ -177,7 +188,7 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
       return;
     case "scenario_created":
     case "scenario_updated":
-      story.scenarios = Object.fromEntries(event.scenarios.map((scenario) => [scenario.id, scenario.assessment])) as unknown as ScenarioWeights;
+      story.scenarios = { ...story.scenarios, [event.scenario.id]: event.scenario.assessment } as ScenarioWeights;
       return;
     default:
       return;

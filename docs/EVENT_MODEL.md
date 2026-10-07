@@ -2,17 +2,20 @@
 
 ## Status
 
-Implemented in Phase 10 (2026-10-07). The contract lives in `src/events/schema.ts` (Zod schemas with inferred TypeScript types), the bus in `src/events/bus.ts`, and the shared agent-state transition table in `src/events/agents.ts`. Phase 11 adds `MorphOperation`s for the state-changing part.
+Implemented in Phase 10 (2026-10-07). The contract lives in `src/events/schema.ts` (Zod schemas with inferred TypeScript types), the bus in `src/events/bus.ts`, and the shared agent-state transition table in `src/events/agents.ts`. Phase 11 (2026-10-07) put every change to the canonical record behind validated `MorphOperation`s (see Operations below).
 
 ## Role of events
 
 Every happening in a run is a typed `WorkspaceEvent` on one in-memory bus. The demo timeline (DEMO) or the orchestrator (REAL) publishes them. The 3D world, the canonical workspace store, the HUD's steps list, replay and telemetry subscribe. The world never reads the story script and the story script never touches the world; they meet only on the bus.
 
 ```text
-Demo story runner (DEMO) / orchestrator (REAL)
-        │ publishes: agent_assigned, agent_work_started, evidence_discovered, …
-        ▼
-Event bus (in-memory, synchronous, typed) ──► workspace store (applyWorkspaceEvent → canonical state)
+Demo story runner (DEMO) / orchestrator (REAL) / AI proposals (later)
+        │ activity events: agent_assigned, agent_work_started, …      │ proposed MorphOperations
+        │                                                            ▼
+        │                         operation gate → applyMorphOperation → workspace store (canonical record)
+        │                                                            │ record events (with the operation) or operation_rejected
+        ▼                                                            ▼
+Event bus (in-memory, synchronous, typed) ──► workspace store (agent activity only)
         │                                 ──► HUD steps list and caption (narrated from history)
         ▼
 3D world: reacts (plans a route, opens a station, launches an artifact, updates the Core)
@@ -24,7 +27,7 @@ DEMO and REAL share this path; only the publisher differs. No external queues.
 
 ## Envelope
 
-Every event has `seq` (strictly increasing per bus), `at` (seconds on the run clock), `cycle` (demo loop number), `source`, and an optional `summary`.
+Every event has `seq` (strictly increasing per bus), `at` (seconds on the run clock), `cycle` (demo loop number), `source`, an optional `summary`, and — on record events only — `operation`: the id, type, provenance and reason of the accepted operation that caused it. The bus refuses a record event without `operation` and any other event with one, so only the gate can announce record changes.
 
 | Source | Meaning |
 | --- | --- |
@@ -47,14 +50,17 @@ Every event has `seq` (strictly increasing per bus), `at` (seconds on the run cl
 | Group | Events |
 | --- | --- |
 | Run | `run_started` |
-| Objective and planning | `objective_received`, `planning_started`, `plan_created` |
-| Workspace morph | `workspace_morph_started`, `workspace_morph_completed`, `module_reserved`, `module_created`, `module_updated` (panel headline), `module_emphasized`, `module_removed` |
+| Objective and planning | `objective_received`, `objective_updated`, `planning_started`, `plan_created` |
+| Workspace morph | `workspace_morph_started`, `workspace_morph_completed`, `module_reserved`, `module_created`, `module_updated` (title, collapse, panel headline), `module_moved`, `module_resized`, `module_emphasized`, `module_removed` |
 | Agent lifecycle | `agent_assigned`, `agent_move_started`, `agent_arrived`, `agent_work_started` (working, evaluating or collaborating), `sources_checked`, `task_completed`, `task_failed`, `retry_requested`, `retry_started`, `agent_waiting`, `agent_idle`, `agent_collaboration_started` |
 | Artifacts | `artifact_handoff_started`, `artifact_handoff_completed` |
 | Tools | `tool_started`, `tool_completed`, `tool_failed` (defined; first used by real tools) |
-| Evidence and assumptions | `evidence_discovered`, `assumption_created`, `assumption_challenged`, `assumption_resolved` |
+| Evidence and assumptions | `evidence_discovered`, `evidence_removed`, `assumption_created`, `assumption_challenged`, `assumption_resolved` |
 | Human input | `human_input_requested`, `human_input_received` |
 | Scenarios and outcome | `scenario_created`, `scenario_updated`, `recommendation_updated`, `synthesis_started`, `synthesis_completed` |
+| Operations | `task_assigned`, `camera_focus_requested`, `operation_rejected` |
+
+Record events (`RECORD_EVENTS` in `schema.ts`) are the ones an accepted operation announces: objective, module, evidence, assumption, scenario, recommendation, human-input, `task_assigned` and `camera_focus_requested` events. Everything else is activity.
 
 Events reference agents, modules, evidence and assumptions by id. Modules carry a domain `kind`; the world maps kinds to registered workstations, with a plain console for unknown kinds.
 
@@ -82,7 +88,8 @@ Events reference agents, modules, evidence and assumptions by id. Modules carry 
 | `agent_work_started` and other work states | The agent stands at its station, faces it and follows it if the layout shifts |
 | `artifact_handoff_started` | A physical artifact flies between the two agents; on landing the world reports `artifact_handoff_completed` |
 | `module_reserved` / `module_created` / `module_removed` | A slot is held, a station materializes, or a station dissolves |
-| `module_updated` | The station's floating panel changes its headline |
+| `module_updated` | The station's floating panel changes its headline; a new title or collapse applies too |
+| `module_moved` / `module_resized` | The station moves to another neighborhood or changes size; the layout re-spaces |
 | `sources_checked` | The station's source indicators and the archive towers fill |
 | `objective_received`, `plan_created`, `assumption_challenged`, `assumption_resolved`, `synthesis_started`, final `recommendation_updated` | The Intent Core changes mood (listening, delegating, uncertain, converging, completed) |
 | `scenario_created` / `scenario_updated` | The Possibility Engine's branches change weight |
@@ -90,6 +97,31 @@ Events reference agents, modules, evidence and assumptions by id. Modules carry 
 
 Visual timing (walk speed, the assignment pause, flight duration, materialize and dissolve) stays in the world layer.
 
+## Operations
+
+A `MorphOperation` (`src/state/operations.ts`) is a proposed change to the canonical record, written as plain data. It is the only way the record (objective, modules, evidence, assumptions, scenarios, recommendation, questions, task assignments, camera focus) changes. Agent activity — state, current task, task history — stays on activity events.
+
+| Group | Operations |
+| --- | --- |
+| Objective | `set_objective`, `update_objective` |
+| Modules | `add_module` (optionally `reserve`), `update_module`, `move_module`, `resize_module`, `emphasize_module`, `deemphasize_module`, `remove_module` |
+| Evidence and assumptions | `add_evidence`, `remove_evidence` (optionally superseded by another item), `add_assumption`, `challenge_assumption`, `update_assumption` |
+| Scenarios and answer | `add_scenario`, `update_scenario`, `update_recommendation` |
+| People and view | `request_human_input`, `answer_human_input`, `assign_agent`, `focus_camera` |
+
+Every operation has an `id`, a `source` (provenance: user, demo, orchestrator or model, with an optional agent and label) and an optional `why` (reason, evidence ids, assumption, agent). `applyMorphOperation(workspace, input)` is pure and deterministic. It returns the new workspace or a refusal with a reason, and a refusal leaves the workspace untouched. It refuses:
+
+- input that isn't plain data, is over 16 KB, has an unknown operation, or fails the strict schema (unknown fields, including markup or code, are refused, not stripped);
+- an id that was already applied;
+- a significant change (`add_module`, `move_module`, `emphasize_module`, `deemphasize_module`, `remove_module`, `remove_evidence`, `update_recommendation`) without a reason;
+- references to modules, evidence, assumptions, scenarios, agents or questions that don't exist, and out-of-order changes;
+- evidence marked verified unless it comes from the user or a tool; user evidence, answers to the user's questions, or a new objective from a model or the orchestrator;
+- removing evidence that the answer cites or that settled an assumption; a recommendation citing evidence that isn't accepted; a final recommendation without a statement and reason.
+
+Text stays text: the HUD renders it as plain strings, never as HTML.
+
+The operation gate (`src/state/gate.ts`) is the only caller in a run. `gate.submit(input, { as, summary })` stamps the trusted channel's provenance (`as`) over whatever source the proposal claims, applies the operation to the store, and publishes either its record events carrying the operation reference, or `operation_rejected` with the reason. The world reacts only to those published record events, so it never shows a refused change. The development-only page `/dev/operations` sends good and deliberately broken requests through a real gate.
+
 ## Demo timeline
 
-The flagship story's facts are `UAE_TIMELINE` in `src/state/fixtures/uae-market.ts`: for each story moment, the events it publishes in order, plus its narration. The prototype story runner (`src/visualization/world/sim/runner.ts`) plays each agent's script by publishing events and waiting for the world's reports. Phase 13 moves it into the orchestration layer as the deterministic demo runtime.
+The flagship story's facts are `UAE_TIMELINE` in `src/state/fixtures/uae-market.ts`: for each story moment, its items in order (activity events and proposed operations, each significant one with a reason), plus its narration. The runner proposes the operations through the gate as the demo, or as the user for the user's own question and answer; a full run has no refusals. The prototype story runner (`src/visualization/world/sim/runner.ts`) plays each agent's script by publishing events and waiting for the world's reports. Phase 13 moves it into the orchestration layer as the deterministic demo runtime.

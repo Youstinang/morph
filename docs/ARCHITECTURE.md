@@ -34,7 +34,7 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 | `src/visualization/ui` | 2D primitives and HUD | `src/components/ui`, `src/components/hud` |
 | `src/visualization/world` | `/lab` world slice: `scene/` (lighting, orbital station deck, Intent Core, characters, zones, artifacts, tag projection), `sim/` (prototype agent simulation and script), HUD and scene composition | `src/world/*` |
 | `src/events` | `WorkspaceEvent` contract, in-memory event bus, shared agent-state transitions | `src/morph/events` |
-| `src/state` | Domain schemas, store, selectors, event application, MorphOperations | `src/morph/domain`, `state`, `operations` |
+| `src/state` | Domain schemas, store, selectors, pure transitions, MorphOperations (`operations.ts`), the operation gate (`gate.ts`), agent-activity application | `src/morph/domain`, `state`, `operations` |
 | `src/orchestration` | Orchestrator, demo runtime | `src/morph/orchestration`, `demo` |
 | `src/server/providers` | Secret-bearing AI provider adapters | `src/morph/providers` |
 | `src/server/tools` | Server-side tool adapters | `src/morph/tools` |
@@ -42,7 +42,7 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 | `src/config` | Environment validation | `src/lib` |
 | `tests` | Shared test setup and integration tests | `tests` |
 
-The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
+The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. The operation gate is the single entry point for record changes during a run: it stamps the trusted channel's provenance over any claimed source, applies the operation, and announces the result on the bus (Phase 11). ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
 
 ## Technology
 
@@ -55,7 +55,7 @@ Added 2026-10-06 for the world slice: three 0.186.1, @react-three/fiber 9.8.1, @
 - Credentials and secret-bearing AI/tool execution stay server-side; never use `NEXT_PUBLIC_` for secrets.
 - Model and tool outputs are untrusted until validated. Unsourced model text is never verified evidence.
 - Bound concurrency, retries, execution steps, model calls, time, and cost; support cancellation; fail visibly and gracefully.
-- No arbitrary AI-generated code or HTML execution; only trusted registered components render.
+- No arbitrary AI-generated code or HTML execution; only trusted registered components render. Operations are strict plain data: unknown fields are refused, text renders as text, and a proposal can't claim to be the user.
 - Three.js resources, animation loops, and listeners are disposed. Rendering targets 60 FPS on a modern MacBook, with a graceful ~30 FPS fallback.
 
 ## Implementation plan (primary specification, 26 phases)

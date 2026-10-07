@@ -26,7 +26,8 @@ describe("event bus", () => {
     bus.subscribe((event) => seen.push(event));
     expect(bus.publish({ type: "agent_teleported", agentId: "nova" } as never, "demo")).toBeNull();
     expect(bus.publish({ type: "planning_started" } as never, "demo")).toBeNull();
-    expect(bus.publish({ type: "scenario_updated", scenarios: [{ id: "a", label: "A", assessment: 1.7 }] }, "demo")).toBeNull();
+    const operation = { id: "op-1", type: "update_scenario", source: { kind: "demo" } } as const;
+    expect(bus.publish({ type: "scenario_updated", scenario: { id: "a", label: "A", assessment: 1.7 }, operation }, "demo")).toBeNull();
     expect(bus.publish({ type: "planning_started", agentId: "nova", summary: "" }, "demo")).toBeNull();
     expect(seen).toHaveLength(0);
     expect(bus.history()).toHaveLength(0);

@@ -223,7 +223,7 @@ describe("event-driven world", () => {
     const feed = (draft: EventDraft) =>
       reactToEvent(world, { ...draft, seq: ++seq, at: 0, cycle: 0, source: "demo" } as WorkspaceEvent, (r) => reports.push(r.type));
     feed({ type: "module_created", module: { id: "valuation", title: "Valuation", kind: "valuation", group: "analysis" } });
-    feed({ type: "module_updated", moduleId: "valuation", headline: "Fair price found", detail: "Within range" });
+    feed({ type: "module_updated", moduleId: "valuation", changes: { summary: { headline: "Fair price found", detail: "Within range" } } });
     feed({ type: "agent_assigned", agentId: "sage", target: { kind: "module", moduleId: "valuation" }, task: "pricing", travel: "moving" });
     expect(world.modules.valuation).toMatchObject({ visible: true, headline: { headline: "Fair price found" } });
     expect(world.modules.valuation!.spec.station).toBe("console");

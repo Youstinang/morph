@@ -76,9 +76,11 @@ export const WorkspaceModuleSchema = z.object({
   collapsed: z.boolean(),
   size: z.number().min(0.7).max(1.15),
   openedAt: Time.nullable(),
+  /** The module's current one-line takeaway, shown on its panel. */
+  summary: z.object({ headline: z.string().min(1).max(60), detail: z.string().max(120) }).nullable(),
 });
 export type WorkspaceModule = z.infer<typeof WorkspaceModuleSchema>;
-export const ModulePatchSchema = WorkspaceModuleSchema.omit({ id: true, kind: true, group: true }).partial();
+export const ModulePatchSchema = WorkspaceModuleSchema.omit({ id: true, kind: true }).partial();
 export type ModulePatch = z.infer<typeof ModulePatchSchema>;
 
 /** Where a fact came from. Unsourced model statements are never marked verified. */
@@ -168,6 +170,31 @@ export const CostUsageSchema = z.object({
 });
 export type CostUsage = z.infer<typeof CostUsageSchema>;
 
+/** What the camera is asked to pay attention to; a suggestion the camera director may honor. */
+export const FocusSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("module"), moduleId: Id }),
+  z.object({ kind: z.literal("agent"), agentId: Id }),
+  z.object({ kind: z.literal("overview") }),
+]);
+export type Focus = z.infer<typeof FocusSchema>;
+
+/** Who proposed a change. `model` proposals are never trusted as verified evidence or as the human's answer. */
+export const ProvenanceSchema = z.object({
+  kind: z.enum(["user", "demo", "orchestrator", "model"]),
+  agentId: Id.optional(),
+  label: z.string().min(1).max(120).optional(),
+});
+export type Provenance = z.infer<typeof ProvenanceSchema>;
+
+/** "Why did MORPH change?" metadata: an outcome-level reason, never private reasoning. */
+export const WhySchema = z.object({
+  reason: z.string().min(1).max(240),
+  evidenceIds: z.array(Id).max(12).optional(),
+  assumptionId: Id.optional(),
+  agentId: Id.optional(),
+});
+export type Why = z.infer<typeof WhySchema>;
+
 export const WorkspaceSchema = z.object({
   id: Id,
   mode: z.enum(["demo", "real"]),
@@ -185,5 +212,8 @@ export const WorkspaceSchema = z.object({
   humanInputs: z.array(HumanInputRequestSchema),
   toolCalls: z.array(ToolCallSchema),
   cost: CostUsageSchema,
+  focus: FocusSchema.nullable(),
+  /** Ids of operations already applied in this run, so a repeated operation is refused. */
+  appliedOperationIds: z.array(Id),
 });
 export type Workspace = z.infer<typeof WorkspaceSchema>;

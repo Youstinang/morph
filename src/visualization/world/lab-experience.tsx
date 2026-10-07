@@ -2,10 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useRef, useState } from "react";
-import { connectWorkspace } from "@/state/apply-event";
-import { createUaeWorkspace } from "@/state/fixtures/uae-market";
 import { WorkspaceProvider } from "@/state/react";
-import { createWorkspaceStore } from "@/state/store";
 import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
 import { LabHud } from "./lab-hud";
@@ -22,12 +19,7 @@ const LabScene = dynamic(() => import("./lab-scene"), {
 const SPEEDS = [1, 2] as const;
 
 export function LabExperience() {
-  const [{ session, store }] = useState(() => {
-    const session = createDemoSession();
-    const store = createWorkspaceStore(createUaeWorkspace());
-    connectWorkspace(session.bus, store, createUaeWorkspace);
-    return { session, store };
-  });
+  const [session] = useState(createDemoSession);
   const worldRef = useRef<World>(session.world);
   const tags = useRef<TagRegistry>({});
   const [snapshot, setSnapshot] = useState<LabSnapshot>(() => takeSnapshot(session.world, session.bus.history()));
@@ -56,7 +48,7 @@ export function LabExperience() {
   }, [session, handleSnapshot]);
 
   return (
-    <WorkspaceProvider store={store}>
+    <WorkspaceProvider store={session.store}>
       <main className={`lab-root ${labels ? "" : "lab-root--no-labels"}`} style={HUD_CSS_VARS}>
         <div className="lab-canvas">
           <LabScene

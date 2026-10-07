@@ -62,7 +62,9 @@ export type ModuleChange =
   | { op: "remove"; id: ModuleId }
   | { op: "emphasize"; id: ModuleId; emphasis: ModuleEmphasis }
   | { op: "collapse"; id: ModuleId; collapsed: boolean }
-  | { op: "resize"; id: ModuleId; size: number };
+  | { op: "resize"; id: ModuleId; size: number }
+  | { op: "move"; id: ModuleId; group: ModuleGroup }
+  | { op: "retitle"; id: ModuleId; title: string };
 
 export type CoreState =
   | "dormant"
