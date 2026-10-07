@@ -5,7 +5,8 @@ import { AGENT_ORDER, CORE_RADIUS, homePosition } from "./roster";
 import { MODULE_CATALOG, SCRIPT } from "./script";
 import { LOOP_RESTART_DELAY, createDemoSession, type DemoSession } from "./session";
 import type { AgentId, AgentState } from "./types";
-import { coreState, createWorld, planRoute, reactToEvent, scenarioWeights } from "./world";
+import { moduleSpot } from "./modules";
+import { coreState, createWorld, planRoute, reactToEvent, scenarioWeights, stepWorld } from "./world";
 
 const DT = 1 / 60;
 
@@ -233,6 +234,40 @@ describe("event-driven world", () => {
     expect(coreState(world)).toBe("uncertain");
     feed({ type: "agent_assigned", agentId: "ghost", target: { kind: "home" }, task: "haunting", travel: "moving" });
     expect(Object.keys(world.agents)).not.toContain("ghost");
+  });
+
+  it("acts out replacements and morphs, and an agent follows its moved station around the Core", () => {
+    const world = createWorld();
+    let seq = 0;
+    const feed = (draft: EventDraft) => reactToEvent(world, { ...draft, seq: ++seq, at: 0, cycle: 0, source: "demo" } as WorkspaceEvent, () => {});
+    feed({ type: "workspace_morph_started", reason: "New plan." });
+    expect(world.morph).toMatchObject({ startedAt: 0, endedAt: null, reason: "New plan." });
+    feed({ type: "module_created", module: { id: "market", title: "Market", kind: "market", group: "research" } });
+    feed({ type: "module_created", module: { id: "targets", title: "Targets", kind: "targets", group: "research" }, replaces: "market" });
+    expect(world.modules.market!.replacedBy).toBe("targets");
+    expect(world.modules.targets!.position).toEqual(world.modules.market!.position);
+
+    for (let i = 0; i < 4 / DT; i += 1) {
+      world.time += DT;
+      stepWorld(world, DT, () => {});
+    }
+    feed({ type: "workspace_morph_completed" });
+    expect(world.morph!.endedAt).toBeCloseTo(world.time);
+
+    const sage = world.agents.sage;
+    sage.state = "working";
+    sage.zone = "targets";
+    sage.position = [...moduleSpot(world, "targets", "sage")!];
+    feed({ type: "module_moved", moduleId: "targets", group: "decision" });
+    let closest = Infinity;
+    for (let i = 0; i < 12 / DT; i += 1) {
+      world.time += DT;
+      stepWorld(world, DT, () => {});
+      closest = Math.min(closest, Math.hypot(...sage.position));
+    }
+    expect(closest).toBeGreaterThan(CORE_RADIUS);
+    const [sx, sz] = moduleSpot(world, "targets", "sage")!;
+    expect(Math.hypot(sage.position[0] - sx, sage.position[1] - sz)).toBeLessThan(0.05);
   });
 
   it("narrates the story moments the approved HUD narrated", () => {

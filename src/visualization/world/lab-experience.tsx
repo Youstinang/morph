@@ -6,6 +6,7 @@ import { WorkspaceProvider } from "@/state/react";
 import { AgentTags, type TagRegistry } from "./agent-tags";
 import { HUD_CSS_VARS } from "./hud-layout";
 import { LabHud } from "./lab-hud";
+import { ReducedMotionContext, usePrefersReducedMotion } from "./motion";
 import { createDemoSession } from "./sim/session";
 import type { AgentId, World } from "./sim/types";
 import { takeSnapshot, type LabSnapshot } from "./snapshot";
@@ -28,6 +29,7 @@ export function LabExperience() {
   const [labels, setLabels] = useState(true);
   const [quality, setQuality] = useState<"high" | "balanced">("high");
   const [selected, setSelected] = useState<AgentId | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
 
   const handleSnapshot = useCallback(
     (world: World) => setSnapshot(takeSnapshot(world, session.bus.history())),
@@ -49,40 +51,42 @@ export function LabExperience() {
 
   return (
     <WorkspaceProvider store={session.store}>
-      <main className={`lab-root ${labels ? "" : "lab-root--no-labels"}`} style={HUD_CSS_VARS}>
-        <div className="lab-canvas">
-          <LabScene
-            worldRef={worldRef}
+      <ReducedMotionContext.Provider value={reducedMotion}>
+        <main className={`lab-root ${labels ? "" : "lab-root--no-labels"}`} style={HUD_CSS_VARS}>
+          <div className="lab-canvas">
+            <LabScene
+              worldRef={worldRef}
+              paused={paused}
+              speed={SPEEDS[speedIndex] ?? 1}
+              step={step}
+              onSnapshot={handleSnapshot}
+              selected={selected}
+              onSelect={setSelected}
+              quality={quality}
+              tags={tags}
+            />
+          </div>
+          <AgentTags registry={tags} selected={selected} />
+          <LabHud
+            snapshot={snapshot}
             paused={paused}
             speed={SPEEDS[speedIndex] ?? 1}
-            step={step}
-            onSnapshot={handleSnapshot}
-            selected={selected}
-            onSelect={setSelected}
+            labels={labels}
             quality={quality}
-            tags={tags}
+            selected={selected}
+            onTogglePause={() => setPaused((value) => !value)}
+            onRestart={restart}
+            onSpeed={() => setSpeedIndex((index) => (index + 1) % SPEEDS.length)}
+            onToggleLabels={() => setLabels((value) => !value)}
+            onToggleQuality={() => setQuality((value) => (value === "high" ? "balanced" : "high"))}
+            onSelect={setSelected}
+            onConfirmBudget={() => {
+              session.answerBudget();
+              handleSnapshot(session.world);
+            }}
           />
-        </div>
-        <AgentTags registry={tags} selected={selected} />
-        <LabHud
-          snapshot={snapshot}
-          paused={paused}
-          speed={SPEEDS[speedIndex] ?? 1}
-          labels={labels}
-          quality={quality}
-          selected={selected}
-          onTogglePause={() => setPaused((value) => !value)}
-          onRestart={restart}
-          onSpeed={() => setSpeedIndex((index) => (index + 1) % SPEEDS.length)}
-          onToggleLabels={() => setLabels((value) => !value)}
-          onToggleQuality={() => setQuality((value) => (value === "high" ? "balanced" : "high"))}
-          onSelect={setSelected}
-          onConfirmBudget={() => {
-            session.answerBudget();
-            handleSnapshot(session.world);
-          }}
-        />
-      </main>
+        </main>
+      </ReducedMotionContext.Provider>
     </WorkspaceProvider>
   );
 }

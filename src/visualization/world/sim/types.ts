@@ -52,12 +52,56 @@ export interface ModuleRuntime {
   position: Vec2;
   bearing: number;
   layoutScale: number;
+  /** Footprint scale at rest after the last layout: size × emphasis × collapse × crowding. */
+  restScale: number;
+  /** Set when the layout moves or resizes the module; it travels from here to `position`. */
+  transit: ModuleTransit | null;
+  /** The module that took this one's slot; it dissolves in place, out of the layout. */
+  replacedBy: ModuleId | null;
 }
 
-export type ModuleStatus = "reserved" | "materializing" | "active" | "idle" | "collapsed" | "dissolving";
+/**
+ * A layout move. Neighbours glide along the arc around the Core; a module that changes neighborhood
+ * is lifted and carried over the others, so it never crosses the Core or another station.
+ */
+export interface ModuleTransit {
+  from: Vec2;
+  fromBearing: number;
+  startedAt: number;
+  duration: number;
+  lifted: boolean;
+  /** Carry height (0–1) at the start, so a redirected carry stays in the air. */
+  fromHeight: number;
+  /** Footprint and crowding scale at the start; they change in step with the travel. */
+  fromScale: number;
+  fromCrowd: number;
+}
+
+/** Where a module is drawn right now. */
+export interface ModulePose {
+  position: Vec2;
+  bearing: number;
+  /** Height above the deck while carried, and the matching shrink (1 = full size). */
+  lift: number;
+  carry: number;
+  /** Footprint scale (size × emphasis × collapse × crowding) and crowding scale, before carrying. */
+  scale: number;
+  crowd: number;
+  /** 0 → 1 over the move; 1 when at rest. */
+  progress: number;
+}
+
+/** A coordinated reshuffle announced by `workspace_morph_started`; ends at `workspace_morph_completed`. */
+export interface WorldMorph {
+  startedAt: number;
+  endedAt: number | null;
+  reason: string;
+}
+
+export type ModuleStatus = "reserved" | "materializing" | "moving" | "active" | "idle" | "collapsed" | "dissolving";
 
 export type ModuleChange =
-  | { op: "create"; spec: ModuleSpec; visible?: boolean }
+  | { op: "create"; spec: ModuleSpec; visible?: boolean; replaces?: ModuleId }
   | { op: "reveal"; id: ModuleId }
   | { op: "remove"; id: ModuleId }
   | { op: "emphasize"; id: ModuleId; emphasis: ModuleEmphasis }
@@ -173,4 +217,6 @@ export interface World {
   layoutVersion: number;
   artifacts: ArtifactFlight[];
   story: StoryView;
+  /** The latest reshuffle, if any. */
+  morph: WorldMorph | null;
 }

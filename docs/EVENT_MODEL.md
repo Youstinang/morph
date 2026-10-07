@@ -87,15 +87,18 @@ Events reference agents, modules, evidence and assumptions by id. Modules carry 
 | arrival | The world reports `agent_arrived`; the story continues only then |
 | `agent_work_started` and other work states | The agent stands at its station, faces it and follows it if the layout shifts |
 | `artifact_handoff_started` | A physical artifact flies between the two agents; on landing the world reports `artifact_handoff_completed` |
-| `module_reserved` / `module_created` / `module_removed` | A slot is held, a station materializes, or a station dissolves |
+| `module_reserved` / `module_created` / `module_removed` | A slot is held, a station materializes, or a station dissolves; neighbors glide to make room first |
+| `module_created` with `replaces` | The new station takes the old one's slot and motion and grows there while the old one dissolves in place |
 | `module_updated` | The station's floating panel changes its headline; a new title or collapse applies too |
-| `module_moved` / `module_resized` | The station moves to another neighborhood or changes size; the layout re-spaces |
+| `module_moved` / `module_resized` | The station is carried to another neighborhood (lifted, shrunk, travelling around the Core) or changes size; its old and new neighbors glide on one shared clock |
+| `module_emphasized` | The station brightens or dims, and its light column re-flashes |
+| `workspace_morph_started` / `workspace_morph_completed` | A ring of light sweeps the floor outward from the Core; `world.morph` records the morph |
 | `sources_checked` | The station's source indicators and the archive towers fill |
 | `objective_received`, `plan_created`, `assumption_challenged`, `assumption_resolved`, `synthesis_started`, final `recommendation_updated` | The Intent Core changes mood (listening, delegating, uncertain, converging, completed) |
 | `scenario_created` / `scenario_updated` | The Possibility Engine's branches change weight |
 | `human_input_requested` / `human_input_received` | The budget cue appears and clears |
 
-Visual timing (walk speed, the assignment pause, flight duration, materialize and dissolve) stays in the world layer.
+Visual timing (walk speed, the assignment pause, flight duration, materialize and dissolve, glide and carry durations) stays in the world layer. With reduced motion, stations fade between places and the sweep is skipped; the events and resulting state are identical.
 
 ## Operations
 

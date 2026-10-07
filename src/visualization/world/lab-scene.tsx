@@ -6,6 +6,7 @@ import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { useMemo, useRef, type ComponentRef, type RefObject } from "react";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { hudInsets, type HudInsets } from "./hud-layout";
+import { useReducedMotion } from "./motion";
 import { sectorFramePoints } from "./sim/layout";
 import { AGENT_ORDER, homePosition } from "./sim/roster";
 import type { AgentId, World } from "./sim/types";
@@ -13,6 +14,7 @@ import { Artifacts } from "./scene/artifacts";
 import { Chamber } from "./scene/chamber";
 import { Character } from "./scene/character";
 import { IntentCore } from "./scene/intent-core";
+import { MorphSweep } from "./scene/morph-sweep";
 import { Station } from "./scene/station";
 import { TagProjector } from "./scene/tag-projector";
 import type { TagRegistry } from "./agent-tags";
@@ -166,6 +168,7 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
   const facing = useRef(Number.NaN);
   const dolly = useRef({ settling: false, last: null as AgentId | null });
   const size = useThree((state) => state.size);
+  const reduced = useReducedMotion();
   const probe = useMemo(() => new PerspectiveCamera(), []);
   const fit = useRef({
     key: "",
@@ -203,7 +206,8 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
       } else if (!selected && (!previous || Math.abs(previous.distance - f.framing.distance) > 0.3)) d.settling = true;
     }
     const framing = f.framing!;
-    const shiftK = 1 - Math.exp(-dt * 2.4);
+    const ease = (rate: number) => (reduced ? 1 : 1 - Math.exp(-dt * rate));
+    const shiftK = ease(2.4);
     f.shiftX = MathUtils.lerp(f.shiftX, selected ? 0 : framing.shiftX, shiftK);
     f.shiftY = MathUtils.lerp(f.shiftY, selected ? 0 : framing.shiftY, shiftK);
     applyViewOffset(perspective, size.width, size.height, f.insets, f.shiftX, f.shiftY);
@@ -219,18 +223,18 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
       goal.current.set(x, PORTRAIT_HEIGHT, z);
       if (Number.isNaN(facing.current)) facing.current = agent.facing;
       const turn = Math.atan2(Math.sin(agent.facing - facing.current), Math.cos(agent.facing - facing.current));
-      facing.current += turn * (1 - Math.exp(-dt * 1.6));
+      facing.current += turn * ease(1.6);
       const atStation = world.moduleOrder.some((id) => {
         const [mx, mz] = world.modules[id]!.position;
         return Math.hypot(mx - x, mz - z) < STATION_CLEARANCE;
       });
       const angle = atStation ? Math.atan2(-x, -z) + STATION_SWING : facing.current + PORTRAIT_SWING;
       portrait.current.set(x + Math.sin(angle) * CLOSE_UP_DISTANCE, PORTRAIT_HEIGHT + 0.7, z + Math.cos(angle) * CLOSE_UP_DISTANCE);
-      const k = 1 - Math.exp(-dt * 2.4);
+      const k = ease(2.4);
       target.lerp(goal.current, k);
       camera.position.lerp(portrait.current, k);
     } else {
-      const k = 1 - Math.exp(-dt * 2.2);
+      const k = ease(2.2);
       target.lerp(OVERVIEW_TARGET, k);
       if (d.settling) {
         offset.current.subVectors(camera.position, target);
@@ -245,7 +249,7 @@ function CameraFocus({ worldRef, selected }: { worldRef: RefObject<World>; selec
     <OrbitControls
       ref={controls}
       makeDefault
-      enableDamping
+      enableDamping={!reduced}
       dampingFactor={0.08}
       minDistance={3}
       maxDistance={90}
@@ -285,6 +289,7 @@ export default function LabScene({
       <Chamber />
       <Station worldRef={worldRef} reflections={quality === "high"} />
       <IntentCore worldRef={worldRef} />
+      <MorphSweep worldRef={worldRef} />
       {AGENT_ORDER.map((id) => (
         <Character key={id} id={id} worldRef={worldRef} selected={selected === id} onSelect={onSelect} />
       ))}

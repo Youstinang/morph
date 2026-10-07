@@ -164,6 +164,24 @@ describe("applyMorphOperation", () => {
     expect(refusal(ws, ops.module("risk"))).toBe("module risk already exists");
   });
 
+  it("replaces a module in its slot and hands its evidence over", () => {
+    const targets = (extra: Record<string, unknown> = {}) => ({
+      ...ops.module("targets"),
+      module: { id: "targets", title: "Targets", kind: "targets", group: "research" },
+      replaces: "market",
+      ...extra,
+    });
+    const ws = chain(createUaeWorkspace(), ops.module("market"), ops.module("risk"), ops.evidence("ev-m", "market"));
+    const next = chain(ws, targets());
+    expect(next.moduleOrder).toEqual(["targets", "risk"]);
+    expect(next.modules.market).toBeUndefined();
+    expect(next.evidence.find((item) => item.id === "ev-m")!.moduleId).toBe("targets");
+    expect(refusal(ws, targets({ reserve: true }))).toBe("a reserved module can't replace another");
+    expect(refusal(ws, targets({ replaces: "ghost" }))).toBe("module ghost does not exist");
+    expect(refusal(ws, { ...ops.module("market"), replaces: "market" })).toBe("a module can't replace itself");
+    expect(refusal(ws, { ...ops.module("risk"), replaces: "market" })).toBe("module risk already exists");
+  });
+
   it("follows the assumption lifecycle and evidence rules", () => {
     let ws = chain(
       createUaeWorkspace(),
@@ -245,6 +263,13 @@ describe("operation gate", () => {
       summary: "Nova opened a station.",
       operation: { type: "add_module", source: { kind: "demo", agentId: "nova" }, why: { reason: "Test reason." } },
     });
+  });
+
+  it("announces a replacement as a module created in place of the old one", () => {
+    const { bus, gate } = setup();
+    gate.submit(ops.module("market"), { as: demo });
+    gate.submit({ ...ops.module("targets"), replaces: "market" }, { as: demo });
+    expect(bus.history().at(-1)).toMatchObject({ type: "module_created", module: { id: "targets" }, replaces: "market" });
   });
 
   it("announces a refusal with its reason and changes nothing", () => {

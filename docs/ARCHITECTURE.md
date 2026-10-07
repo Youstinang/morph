@@ -42,7 +42,7 @@ The primary specification suggests `src/morph/*` and `src/world/*` but permits a
 | `src/config` | Environment validation | `src/lib` |
 | `tests` | Shared test setup and integration tests | `tests` |
 
-The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. The operation gate is the single entry point for record changes during a run: it stamps the trusted channel's provenance over any claimed source, applies the operation, and announces the result on the bus (Phase 11). ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
+The event contract and bus live in `src/events` rather than `src/orchestration` (Phase 10) because the world and HUD subscribe to them, and visualization may not import orchestration. The operation gate is the single entry point for record changes during a run: it stamps the trusted channel's provenance over any claimed source, applies the operation, and announces the result on the bus (Phase 11). The morphing engine (Phase 12) is world-layer motion only: it animates accepted record changes and never changes the record itself. ESLint rules prohibit the visualization layer from importing server adapters, orchestration internals, or configuration directly. Subfolders are created when their phase begins; reserved folders contain markers only until then.
 
 ## Technology
 

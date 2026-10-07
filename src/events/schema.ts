@@ -49,7 +49,7 @@ export const EventDraftSchema = z.discriminatedUnion("type", [
   event("workspace_morph_started", { reason: z.string().min(1).max(240) }),
   event("workspace_morph_completed", {}),
   event("module_reserved", { module: EventModuleSchema }),
-  event("module_created", { module: EventModuleSchema }),
+  event("module_created", { module: EventModuleSchema, replaces: Id.optional() }),
   event("module_updated", {
     moduleId: Id,
     changes: z.object({

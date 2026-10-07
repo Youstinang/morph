@@ -25,6 +25,7 @@ export function operationEvents(o: MorphOperation, after: Workspace): EventDraft
       return [{ type: "objective_updated", status: o.status }];
     case "add_module": {
       const { id, title, kind, group } = o.module;
+      if (o.replaces !== undefined) return [{ type: "module_created", module: { id, title, kind, group }, replaces: o.replaces }];
       return [{ type: o.reserve ? "module_reserved" : "module_created", module: { id, title, kind, group } }];
     }
     case "update_module":

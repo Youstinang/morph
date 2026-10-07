@@ -1,10 +1,10 @@
 # MORPH Build Progress
 
 ## Current Phase
-Phase 11 — MorphOperation protocol (authorized 2026-10-07: "ok continue"); complete
+Phase 12 — World morphing engine (authorized 2026-10-07: "yes continue and fix any gabs"); awaiting visual approval
 
 ## Status
-Complete — Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
+Awaiting visual approval — Phase 12 is implemented and validated; it is not Complete until the user approves it visually. Phase 11 is validated (it has no visual checkpoint; the screen is intentionally unchanged, and every change to the record now passes the operation checker). Phase 10 is validated. The post-phase audit after Phases 8–10 is done (see Audit 2026-10-07, after Phases 8–10). Phase 9 is validated. The user visually approved Phase 8 on 2026-10-07. Phases 3–7 were approved on 2026-10-07 after the clear-world pass; the post-phase architecture audit was done (see Audit 2026-10-07).
 
 ## Phase Map
 On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specification and chose to map completed work onto its 26-phase plan.
@@ -112,6 +112,17 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Domain additions: module `summary` (the panel headline), workspace `focus` and `appliedOperationIds`, `ProvenanceSchema`, `WhySchema`, `FocusSchema`.
   - The demo's `UAE_TIMELINE` beats now hold items: activity events and operations; every significant demo operation has a reason. The runner proposes operations through the gate (as the user for the user's question and budget answer, otherwise as the demo with the acting agent), and the end-of-run dissolve is `remove_module` with a reason. The session owns the one store the HUD reads.
   - The world reacts to `module_moved` and `module_resized` (new `move` and `retitle` module changes).
+- 2026-10-07, Phase 12: the user objected to hard-coded content ("that should be LLM driven"). After the explanation that DEMO mode is a fixed offline recording the specification requires and REAL mode is AI-driven, the user chose to **bring the real AI forward right after this phase** (provider and model choice delegated: "pick provider or model what you need according to the output needed").
+  - Consequences: the demo story is unchanged (no new scripted reshuffle); morphing is shown in the `/dev/modules` sandbox and will be driven by the AI planner next; the next phase is the real AI provider and planner (Phase 19, moved forward).
+  - The user pasted an OpenAI key and an Anthropic key in the chat. Both are stored only in `.env.local` (git-ignored, file mode 600, read server-side only) and must be revoked and replaced, because chat text is not a safe place for secrets.
+  - Morphing engine (`sim/modules.ts`): every layout change travels instead of snapping. Stations staying in their neighborhood glide 1.2 s; a station changing neighborhood is carried: it lifts 3.4 units, shrinks to half size, travels along the ring around the Core (arc-length interpolation, 2–3.6 s by distance) and sets down. Size and crowding change with position. All stations in a changed neighborhood share one clock, starting from where they are, so a change in mid-flight continues smoothly; a redirected carry stays in the air; neighbors wait 0.35 s for a lifting station to clear its slot; a newcomer waits 0.9 s for room before growing.
+  - `add_module` accepts `replaces`: the new station takes the old one's slot, position and motion and inherits its evidence; the old one dissolves in place. The gate announces it as `module_created` with `replaces`.
+  - `workspace_morph_started` / `workspace_morph_completed` set `world.morph`; a ring of light sweeps the floor from the Core (`scene/morph-sweep.tsx`).
+  - Priority changes re-flash the station's light column (brighter when raised).
+  - Agents working at a station that moves walk to its new spot, routed around the Core.
+  - Calm mode (`motion.ts`, follows the operating-system "reduce motion" setting; also a checkbox in the sandbox): stations fade between places instead of travelling, the camera cuts instead of easing, panel bob, shard drift and the sweep stop. Agents still walk, because their movement is state.
+  - `/dev/modules` was rewritten to send operations through the real gate as an AI model would, with presets (Opening plan, New discovery, Priority shift, Rebuild: buy a competitor, Crowd analysis) and per-station controls. Its camera now frames the whole deck.
+  - A favicon (`src/app/icon.svg`) was added. Panel titles now redraw when a station is renamed (they never did before).
 - ESLint: `react-hooks/immutability` is disabled only for `src/visualization/world/scene/**`, because Three.js objects are mutated imperatively inside `useFrame`.
 - Foundation unchanged: Next.js 16.3.8, React 19.3.0, TypeScript 6.0.3 strict, Tailwind 4.3.3, Zod 4.6.5, Vitest 5.0.3, ESLint 9, npm, Node 24.
 
@@ -193,9 +204,17 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - Chrome at 1440×900 at 16 s, 27 s, 44 s and 62 s: unchanged from the approved screens, 60 FPS. Show steps, Confirm and Restart checked live. Console shows only the known favicon 404 and three.js `Clock` notice.
   - `/dev/operations` checked live: as the AI model, all nine broken requests were refused with reasons (missing reason, unknown command, smuggled script, self-verified claim, posing as the user, answering for the user, missing station, repeated id, oversized), a pasted sentence was refused, and the user's own answer was accepted; the record and the world's station list changed only on acceptance.
   - Previews: `operations-checker.png`, `operations-lab-44s.png`.
+- Phase 12 morphing engine pass (2026-10-07):
+  - Typecheck, lint with zero warnings, and the build pass. Tests: 97 in 9 files (10 new).
+  - Engine tests: a glide within a neighborhood; a carry stays on the ring and lifts above 3 units; scripted reshuffles never overlap grounded stations; interrupting a move mid-flight never jumps (each frame moves under 0.4 units); replacement takes the slot and evidence; a same-group move is ignored; a 120-round random reshuffle (add, remove, move, resize, emphasize, collapse, replace, at random moments) never overlaps grounded stations.
+  - A temporary 600-seed version of that random test found 12 distinct overlap causes, all fixed (listed in the decisions above); the last was a replacement of a station still waiting for room growing too early. All 600 seeds pass; the temporary test was removed.
+  - Operation, gate and world tests: replacement keeps the order slot, moves evidence, and refuses reserve-plus-replace, self-replacement, a missing station and an existing id; the gate announces `replaces`; the world reacts to replacement and morph events; an agent follows its moved station without entering the Core.
+  - Chrome at 1440×900: `/lab` at 16 s, 27 s, 44 s and 62 s is unchanged from the approved screens, 60 FPS; Show steps, Confirm and Restart checked live; no favicon 404 any more.
+  - `/dev/modules` checked live with each preset, a carry across neighborhoods, and calm mode; no console errors. Found and fixed: the sandbox camera cropped the decision neighborhood, so carried stations left the frame.
+  - Previews: `morph-rebuild-start.png`, `morph-rebuild-mid.png`, `morph-rebuild-done.png`, `morph-carry.png`, `morph-calm.png`.
 - Visual fixes applied during inspection: raised lighting, reduced Core bloom, enlarged characters (×1.35), moved the camera closer, repositioned zones and the Possibility Engine clear of HUD panels, compacted name tags and the roster, reshaped Vex's blade, and limited the budget card to 3 s after confirmation.
 - Previews: `docs/previews/lab-handoff-15s.png`, `lab-human-input-27s.png`, `lab-critic-retry-44s.png`, `lab-possibility-51s.png`, `lab-recommendation-60s.png`, `lab-mobile-8s.png`; station: `station-handoff-15s.png`, `station-human-input-27s.png`, `station-recommendation-60s.png`, `station-1024-20s.png`.
-- Not yet verified: reduced-motion behavior for the 3D scene (no 3D reduced-motion handling yet), Three.js memory over long sessions, and Safari/Firefox.
+- Not yet verified: Three.js memory over long sessions, and Safari/Firefox.
 
 ## Known Issues
 - Characters use a local auto-rig with distance-based weights:
@@ -204,10 +223,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
   - No facial animation.
 - The source FBX files live outside the repository (`~/Downloads/3d Model `, about 2–3 million triangles each). The conversion and rig scripts are now in `tools/models/`.
 - At narrower widths (about 1024 px) the left roster panel covers part of the Market zone.
-- The 3D scene has no reduced-motion mode yet (camera easing and agent animation always run).
+- Calm mode keeps agent walking and the Core's slow motion; only layout motion, camera easing and decorative drift stop.
+- A carried station is small (half size) and seen from above in the default view, so the lift reads less strongly than in close views.
+- Overlap-free motion is tested for random reshuffles; a pile-up of many interruptions within a fraction of a second has no guarantee beyond those tests.
+- The OpenAI and Anthropic keys pasted in chat must be revoked and replaced in `.env.local`.
 - Camera framing is tuned for 16:9 desktop; portrait mobile crops the outer zones.
 - The 2D design-system page (`/dev/design-system`) is rejected and outdated; the lab HUD is the current 2D direction.
-- No favicon (404 in console).
 - Until Phase 13 the story runner lives in the visualization layer (`sim/runner.ts`), and story timing still lives in `sim/script.ts`. Pause and speed act on the session clock.
 - The event history is capped at 1000 events per session (about three demo loops).
 - `focus_camera` is recorded in the workspace and announced, but the camera doesn't follow it yet (camera direction is Phase 18).
@@ -221,7 +242,7 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - High, fixed (user approved): the project had no version control. A local git repository was initialized with a baseline commit (`1b55b19`); nothing is pushed. Secrets stay out via `.env*` in `.gitignore`.
 - Medium, scheduled: demo state and story (`src/visualization/world/sim`) live inside the visualization layer, and `src/state`/`src/orchestration` are empty. This is the planned prototype; Phases 9–13 move it into canonical state, events, operations and the demo runtime.
 - Medium, fixed in Phase 8: zones were a hardcoded `ZoneId` union with fixed positions in `roster.ts`.
-- Medium, open: no reduced-motion handling in the 3D scene; about 17 MB of GLB models load with no progress indication.
+- Medium, open: (reduced motion fixed in Phase 12) about 17 MB of GLB models load with no progress indication.
 - Low: unused identity fields (`face`, hair and prop) in `roster.ts`, the outdated `/dev/design-system` page, and the missing favicon. Left as is.
 - No findings for secrets, provider leakage or arbitrary code execution: there are no providers or AI calls yet.
 
@@ -233,11 +254,12 @@ On 2026-10-06 the user adopted `docs/MASTER_PROMPT.md` as the primary specificat
 - Ownership: the world no longer reads story signals; the store no longer polls the world; the HUD reads facts from the store and narration from event history. Dependencies: none added in Phase 10. Performance: unchanged, 60 FPS. Safety: events are schema-validated with length limits, unknown fields are stripped, and summaries are fixed fixture text.
 
 ## Deferred Decisions
-- Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 19: AI provider/model. Phase 20: search provider.
+- Phase 14: concurrency, timeout, retry, and spend limits. Phase 18: camera style. Phase 20: search provider.
+- AI provider/model: delegated by the user on 2026-10-07; chosen and recorded in the real AI phase.
 - Phase 23: quality presets (High/Balanced toggle exists). Phase 25: audio. Phase 26: hosting.
 
 ## Next Allowed Phase
-Phase 12 — World morphing engine, once the user authorizes it. It has a visual approval checkpoint. Phase 12 is not authorized yet.
+After the user visually approves Phase 12: the real AI provider and planner (the specification's Phase 19, moved forward by the user's choice on 2026-10-07), once the user authorizes it. Phases 13–18 follow afterwards in order.
 
 ## Last Updated
 2026-10-07 (Asia/Dubai)

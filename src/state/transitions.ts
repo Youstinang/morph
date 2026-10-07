@@ -74,6 +74,22 @@ export function openModule(ws: Workspace, mod: NewModule, reserved = false): Tra
   return { ...ws, moduleOrder: [...ws.moduleOrder, mod.id], modules: { ...ws.modules, [mod.id]: parsed.data } };
 }
 
+/** Opens a module in another's slot; the evidence gathered there moves to the new module. */
+export function replaceModule(ws: Workspace, mod: NewModule, oldId: string): Transition {
+  if (oldId === mod.id) return "a module can't replace itself";
+  if (!ws.modules[oldId]) return `module ${oldId} does not exist`;
+  if (ws.modules[mod.id]) return `module ${mod.id} already exists`;
+  const index = ws.moduleOrder.indexOf(oldId);
+  const without = removeModule(ws, oldId);
+  if (refused(without)) return without;
+  const opened = openModule(without, mod);
+  if (refused(opened)) return opened;
+  const moduleOrder = opened.moduleOrder.filter((id) => id !== mod.id);
+  moduleOrder.splice(index, 0, mod.id);
+  const evidence = opened.evidence.map((item) => (item.moduleId === oldId ? { ...item, moduleId: mod.id } : item));
+  return { ...opened, moduleOrder, evidence };
+}
+
 export function updateModule(ws: Workspace, id: string, patch: ModulePatch): Transition {
   const mod = ws.modules[id];
   if (!mod) return `module ${id} does not exist`;

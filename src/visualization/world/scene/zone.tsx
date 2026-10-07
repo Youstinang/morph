@@ -14,9 +14,10 @@ import {
   type Group,
   type Mesh,
 } from "three";
-import { DISSOLVE_SECONDS, MATERIALIZE_SECONDS, moduleScale } from "../sim/modules";
+import { useReducedMotion } from "../motion";
+import { MATERIALIZE_SECONDS, moduleGrowth, modulePose, moduleScale } from "../sim/modules";
 import { SCENARIO_LABELS } from "../sim/script";
-import type { ModuleHeadline, ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
+import type { ModuleEmphasis, ModuleHeadline, ModuleId, ModuleSpec, ScenarioWeights, Vec2, World } from "../sim/types";
 import { moduleHeadline, scenarioWeights } from "../sim/world";
 import { geo } from "./geometry";
 import { Bay, CoreTrack, ServiceArm, isPresent } from "./module-fixtures";
@@ -137,10 +138,11 @@ interface ModuleRigProps {
 
 /**
  * One spatial module: its workstation, live panel, evidence shards and optional scenario branches, plus the
- * bay, service arm and Core track that belong to it. The rig glides to wherever the layout places it.
+ * bay, service arm and Core track that belong to it. The rig is drawn wherever the module's move puts it.
  */
 function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
   const { id, spec, start } = entry;
+  const reduced = useReducedMotion();
   const station = spec.station === "platform" ? null : spec.station;
   const top = station ? STATION_SHAPES[station].top : 0;
   const panelY = station ? top + 1.05 : 1.75;
@@ -158,12 +160,12 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
   const state = useRef({
     x: start[0],
     z: start[1],
-    scale: 0,
-    size: entry.startSize,
-    crowd: entry.startCrowd,
     fold: 0,
     activity: 0,
     headline: null as ModuleHeadline | null,
+    title: spec.title,
+    emphasis: "normal" as ModuleEmphasis,
+    pulseAt: -Infinity,
   });
   const viewer = useRef(new Vector3());
 
@@ -226,39 +228,54 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
       return;
     }
 
-    s.x = MathUtils.damp(s.x, mod.position[0], 2.2, dt);
-    s.z = MathUtils.damp(s.z, mod.position[1], 2.2, dt);
+    const pose = modulePose(mod, world.time);
+    let [x, z] = pose.position;
+    let lift = pose.lift;
+    let carry = pose.carry;
+    let footprint = pose.scale;
+    let crowd = pose.crowd;
+    if (reduced && mod.transit && pose.progress < 1) {
+      const leaving = pose.progress < 0.5;
+      [x, z] = leaving ? mod.transit.from : mod.position;
+      lift = 0;
+      carry = leaving ? 1 - pose.progress * 2 : pose.progress * 2 - 1;
+      footprint = leaving ? mod.transit.fromScale : mod.restScale;
+      crowd = leaving ? mod.transit.fromCrowd : mod.layoutScale;
+    }
+    s.x = x;
+    s.z = z;
     distance.current = Math.hypot(s.x, s.z);
     rig.current.visible = true;
-    rig.current.position.set(s.x, 0, s.z);
+    rig.current.position.set(s.x, lift, s.z);
     rig.current.rotation.y = Math.atan2(-s.x, -s.z);
 
     const age = world.time - mod.appearedAt;
     const dissolving = mod.removedAt !== null;
-    if (!mod.visible) s.scale = 0;
-    else if (dissolving) s.scale = 1 - MathUtils.smoothstep(world.time - mod.removedAt!, 0, DISSOLVE_SECONDS);
-    else s.scale = Math.max(s.scale, MathUtils.smoothstep(age, 0, MATERIALIZE_SECONDS));
-    s.size = MathUtils.damp(s.size, moduleScale(mod) * mod.layoutScale, 3, dt);
+    const growth = moduleGrowth(mod, world.time);
     s.fold = MathUtils.damp(s.fold, mod.collapsed ? 1 : 0, 4, dt);
-    s.crowd = MathUtils.damp(s.crowd, mod.layoutScale, 3, dt);
-    fixtures.current?.scale.setScalar(s.crowd);
-    const eased = s.scale < 1 ? 1 - (1 - s.scale) ** 3 : 1;
-    const size = eased * s.size;
-    group.current.visible = s.scale > 0.002;
+    fixtures.current?.scale.setScalar(Math.max(0.001, crowd * carry));
+    const size = growth * footprint * carry;
+    group.current.visible = growth > 0.002;
     group.current.scale.set(size, Math.max(size, 0.001), size);
 
+    if (mod.emphasis !== s.emphasis) {
+      if (mod.visible && age > MATERIALIZE_SECONDS) s.pulseAt = world.time;
+      s.emphasis = mod.emphasis;
+    }
     if (column.current) {
       const since = dissolving ? world.time - mod.removedAt! : age;
-      const flash = mod.visible ? Math.max(0, 1 - since / 1.6) : 0;
+      const pulse = mod.emphasis === "muted" ? 0.35 : 0.8;
+      const flash = mod.visible && since >= 0 ? Math.max(0, 1 - since / 1.6, pulse * (1 - (world.time - s.pulseAt) / 1.2)) : 0;
       resources.column.opacity = flash * 0.55;
       column.current.visible = flash > 0.01;
       column.current.scale.set(1 + (1 - flash) * 0.6, 1, 1 + (1 - flash) * 0.6);
     }
 
     const headline = moduleHeadline(world, id);
-    if (headline !== s.headline) {
+    if (headline !== s.headline || mod.spec.title !== s.title) {
       s.headline = headline;
-      drawPanel(resources.texture.image as HTMLCanvasElement, spec.title, spec.color, headline);
+      s.title = mod.spec.title;
+      drawPanel(resources.texture.image as HTMLCanvasElement, s.title, spec.color, headline);
       resources.texture.needsUpdate = true;
     }
 
@@ -268,16 +285,17 @@ function ModuleRig({ entry, worldRef, m }: ModuleRigProps) {
     resources.panel.opacity = (0.82 + s.activity * 0.12) * (mod.emphasis === "muted" ? 0.6 : 1) * (1 - s.fold);
     if (panel.current) {
       panel.current.visible = s.fold < 0.98;
-      panel.current.position.y = panelY + Math.sin(t * 0.8 + s.x) * 0.04;
+      panel.current.position.y = panelY + (reduced ? 0 : Math.sin(t * 0.8 + s.x) * 0.04);
       panel.current.scale.setScalar(Math.max(0.001, 1 - s.fold));
     }
 
     if (shards.current) {
-      shards.current.rotation.y += dt * (0.25 + s.activity * 0.6);
+      const drift = reduced ? 0 : 1;
+      shards.current.rotation.y += dt * (0.25 + s.activity * 0.6) * drift;
       shards.current.children.forEach((child, i) => {
         child.visible = i < mod.evidence;
-        child.position.y = 0.5 + Math.sin(t * 1.3 + i) * 0.08 + (i % 3) * 0.18;
-        child.rotation.x += dt * 1.2;
+        child.position.y = 0.5 + Math.sin(t * 1.3 + i) * 0.08 * drift + (i % 3) * 0.18;
+        child.rotation.x += dt * 1.2 * drift;
       });
     }
 

@@ -39,7 +39,7 @@ export const MorphOperationSchema = z.discriminatedUnion("operation", [
   op("set_objective", { objectiveId: Id, text: Line(600) }),
   op("update_objective", { status: z.enum(["planning", "in_progress", "answered"]) }),
 
-  op("add_module", { module: ModuleInputSchema, reserve: z.boolean().optional() }),
+  op("add_module", { module: ModuleInputSchema, reserve: z.boolean().optional(), replaces: Id.optional() }),
   op("update_module", {
     moduleId: Id,
     changes: z.object({ title: Line(60).optional(), collapsed: z.boolean().optional(), summary: SummarySchema.nullable().optional() }).strict(),
@@ -141,7 +141,9 @@ function transition(ws: Workspace, o: MorphOperation): t.Transition {
       return t.setObjectiveStatus(ws, o.status);
     case "add_module": {
       const { size = 1, ...mod } = o.module;
-      return t.openModule(ws, { ...mod, size, emphasis: "normal", collapsed: false }, o.reserve ?? false);
+      const spec = { ...mod, size, emphasis: "normal", collapsed: false } as const;
+      if (o.replaces === undefined) return t.openModule(ws, spec, o.reserve ?? false);
+      return o.reserve ? "a reserved module can't replace another" : t.replaceModule(ws, spec, o.replaces);
     }
     case "update_module":
       return t.updateModule(ws, o.moduleId, o.changes);

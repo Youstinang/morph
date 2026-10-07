@@ -112,7 +112,19 @@ Zones are distinct spatial machines that materialize, grow, shrink, gain or lose
 - **Materializing and dissolving:** a module rises in a column of light and dissolves the same way. The gap closes only after the dissolve finishes. All modules dissolve before the story loops.
 - **Agents follow:** agents working at a module walk to its new spot if it moves.
 - **Camera:** the overview frames each neighborhood's arc plus any module pushed beyond it, and refits smoothly only when the framing actually changes.
-- **Development sandbox:** `/dev/modules` (development only) exercises every operation on the real deck.
+- **Development sandbox:** `/dev/modules` (development only) sends operations through the real operation gate, as an AI model would, with morph presets and per-station controls.
+
+**Morphing engine (Phase 12).** Every layout change travels; nothing snaps (`sim/modules.ts`, `modulePose`, `moduleGrowth`).
+
+- **Glide:** a station that stays in its neighborhood glides to its new spot and size in 1.2 s.
+- **Carry:** a station that changes neighborhood lifts 3.4 units, shrinks to half size, travels along the ring around the Core (never through it) and sets down, over 2–3.6 s depending on distance.
+- **One clock per neighborhood:** every visible station in a changed neighborhood restarts from where it is, so a new change in mid-flight continues smoothly. Neighbors wait 0.35 s for a lifting station to clear its slot; a newcomer waits 0.9 s for room before growing; a redirected carry stays in the air.
+- **Replacement:** a station replacing another takes its slot and grows there while the old one dissolves in place; the evidence moves with it.
+- **Priority:** emphasis brightens or dims the station and re-flashes its light column.
+- **Morph sweep:** when a morph starts, a ring of light sweeps the floor outward from the Core (`scene/morph-sweep.tsx`).
+- **Collision-free:** grounded stations never overlap during scripted reshuffles and 120-round random reshuffles (tested).
+
+**Calm mode (reduced motion).** Follows the operating-system setting (`motion.ts`). Stations fade out of their old place and into the new one instead of travelling; the camera cuts instead of easing; panel bob, shard drift and the sweep stop. Agents still walk, because their movement shows real state.
 
 **Workstations (user direction, 2026-10-07):** each zone has a workstation model that matches its kind of work, so agents no longer all work at the same-looking station. The user generated the three models with Meshy. They are converted with the same offline pipeline as the agents (about 50,000 triangles and 2 MB each) and stored in `public/models/stations/`. They are wired up in `scene/zone-station.tsx`, and each module's `station` field picks one.
 

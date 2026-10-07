@@ -43,7 +43,7 @@ export function createWorld(cycle = 0): World {
       facingAgent: null,
     };
   }
-  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], story: emptyStory() };
+  return { time: 0, cycle, agents, modules: {}, moduleOrder: [], layoutVersion: 0, artifacts: [], story: emptyStory(), morph: null };
 }
 
 const isAgent = (world: World, id: string): id is AgentId => id in world.agents;
@@ -135,9 +135,16 @@ export function reactToEvent(world: World, event: WorkspaceEvent, report: WorldR
     case "module_reserved":
     case "module_created": {
       const { id, title, kind, group } = event.module;
-      createModule(world, { id, title, group, ...presentationFor(kind) }, event.type === "module_created");
+      const replaces = event.type === "module_created" ? event.replaces : undefined;
+      createModule(world, { id, title, group, ...presentationFor(kind) }, event.type === "module_created", replaces);
       return;
     }
+    case "workspace_morph_started":
+      world.morph = { startedAt: world.time, endedAt: null, reason: event.reason };
+      return;
+    case "workspace_morph_completed":
+      if (world.morph && world.morph.endedAt === null) world.morph.endedAt = world.time;
+      return;
     case "module_updated": {
       const mod = world.modules[event.moduleId];
       if (!mod) return;
@@ -243,16 +250,31 @@ function walk(world: World, agent: AgentRuntime, dt: number, report: WorldReport
   report({ type: "agent_arrived", agentId: agent.id, target: trip.target });
 }
 
-/** If the module was re-laid out while the agent works there, the agent walks to its new spot. */
+/** If the module was re-laid out while the agent works there, the agent walks to its new spot, around the Core. */
 function followModule(world: World, agent: AgentRuntime, zone: ModuleId, dt: number) {
   const spot = moduleSpot(world, zone, agent.id);
   if (!spot) return;
-  const dx = spot[0] - agent.position[0];
-  const dz = spot[1] - agent.position[1];
-  const distance = Math.hypot(dx, dz);
-  if (distance < 0.02) return;
-  const step = Math.min(distance, WALK_SPEED * dt);
-  agent.position = [agent.position[0] + (dx / distance) * step, agent.position[1] + (dz / distance) * step];
+  if (Math.hypot(spot[0] - agent.position[0], spot[1] - agent.position[1]) < 0.02) {
+    agent.route = [];
+    return;
+  }
+  const goal = agent.route.at(-1);
+  if (!goal || Math.hypot(goal[0] - spot[0], goal[1] - spot[1]) > 0.02) agent.route = planRoute(agent.position, spot);
+  let budget = WALK_SPEED * dt;
+  while (budget > 0 && agent.route.length > 0) {
+    const [tx, tz] = agent.route[0]!;
+    const dx = tx - agent.position[0];
+    const dz = tz - agent.position[1];
+    const distance = Math.hypot(dx, dz);
+    if (distance <= budget) {
+      agent.position = [tx, tz];
+      agent.route.shift();
+      budget -= distance;
+    } else {
+      agent.position = [agent.position[0] + (dx / distance) * budget, agent.position[1] + (dz / distance) * budget];
+      budget = 0;
+    }
+  }
   agent.moving = true;
 }
 
