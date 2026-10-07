@@ -1,58 +1,76 @@
 import type { Cue, Mood } from "./cues";
 
-interface Note {
-  /** Hz; `glideTo` slides the pitch over the note. */
+/**
+ * Room tone of the US lab on the International Space Station, recorded by Cmdr Chris Hadfield (CC0, freesound.org
+ * sound 172547), trimmed and crossfaded into a seamless loop.
+ */
+export const DECK_AMBIENCE_URL = "/sound/deck-ambience.m4a";
+
+/** A short console tone; `glideTo` slides the pitch over its length. */
+interface Beep {
+  kind: "beep";
   pitch: number;
   glideTo?: number;
-  /** Seconds after the cue starts. */
   at: number;
-  /** Seconds to fade in and the total length. */
   attack: number;
   length: number;
   gain: number;
   wave: OscillatorType;
 }
 
-const D3 = 146.83;
-const A3 = 220;
-const C4 = 261.63;
-const D4 = 293.66;
-const E4 = 329.63;
-const FS4 = 369.99;
-const A4 = 440;
-const D5 = 587.33;
-const FS5 = 739.99;
+/** A burst of filtered air, like a hatch or a vent; `bandTo` sweeps the filter. */
+interface Hiss {
+  kind: "hiss";
+  band: number;
+  bandTo?: number;
+  at: number;
+  attack: number;
+  length: number;
+  gain: number;
+}
 
-const soft = (pitch: number, at: number, length: number, gain: number, attack = 0.02): Note => ({ pitch, at, attack, length, gain, wave: "sine" });
+const beep = (pitch: number, at: number, length: number, gain: number, more: Partial<Beep> = {}): Beep => ({
+  kind: "beep",
+  pitch,
+  at,
+  attack: 0.006,
+  length,
+  gain,
+  wave: "sine",
+  ...more,
+});
 
-/** Every cue is a few soft notes in D major, under two seconds, with slow fades; no clicks or alarms. */
-const VOICES: Record<Cue, Note[]> = {
-  core: [soft(D4, 0, 1.4, 0.5, 0.08), soft(A4, 0.12, 1.3, 0.35, 0.08)],
-  dispatch: [{ ...soft(FS5, 0, 0.3, 0.2), wave: "triangle" }],
-  transfer: [soft(A4, 0, 0.35, 0.28), soft(D5, 0.14, 0.45, 0.28)],
-  materialize: [soft(D3, 0, 1.2, 0.4, 0.25), soft(A3, 0.05, 1.1, 0.28, 0.25)],
-  challenge: [{ ...soft(A3, 0, 0.6, 0.32, 0.03), wave: "triangle" }, { ...soft(C4, 0.04, 0.6, 0.26, 0.03), wave: "triangle" }],
-  shift: [{ ...soft(E4, 0, 0.7, 0.3, 0.05), glideTo: A4 }],
-  converge: [soft(D4, 0, 2, 0.32, 0.06), soft(FS4, 0.07, 1.9, 0.28, 0.06), soft(A4, 0.14, 1.8, 0.26, 0.06), soft(D5, 0.21, 1.7, 0.2, 0.06)],
+/** Console sounds: soft blips, air hisses and one low chime; all short, none alarming. */
+const VOICES: Record<Cue, (Beep | Hiss)[]> = {
+  core: [
+    { kind: "hiss", band: 400, bandTo: 2200, at: 0, attack: 0.25, length: 0.9, gain: 0.35 },
+    beep(440, 0.1, 0.7, 0.18, { glideTo: 880, attack: 0.2 }),
+  ],
+  dispatch: [beep(1320, 0, 0.08, 0.22)],
+  transfer: [beep(990, 0, 0.06, 0.2), beep(1320, 0.09, 0.07, 0.2)],
+  materialize: [{ kind: "hiss", band: 3200, bandTo: 1400, at: 0, attack: 0.04, length: 0.75, gain: 0.4 }],
+  challenge: [beep(220, 0, 0.1, 0.3, { wave: "triangle" }), beep(220, 0.16, 0.1, 0.3, { wave: "triangle" })],
+  shift: [beep(620, 0, 0.28, 0.16, { glideTo: 930, attack: 0.03 })],
+  converge: [beep(293.66, 0, 1.8, 0.32), beep(587.33, 0, 1.4, 0.14), beep(880, 0, 1, 0.06)],
 };
 
-/** Overall loudness; the cues stay well under speech level. */
+/** Overall loudness of the event sounds; they stay well under speech level. */
 const MASTER_GAIN = 0.16;
-/** The background hum sits under the cues. */
-const AMBIENT_GAIN = 0.025;
-/** Seconds for the hum to ease from one mood to the next. */
+/** The room sound sits under the event sounds. */
+const AMBIENT_GAIN = 0.3;
+/** Seconds for the room to ease from one mood to the next. */
 const MOOD_EASE = 1.6;
 
-/** Hum (a soft drone), shimmer (only while the team works) and pad (the settled answer chord). */
-const MOOD_LEVELS: Record<Mood, { hum: number; brightness: number; shimmer: number; pad: number }> = {
-  waiting: { hum: 0.35, brightness: 420, shimmer: 0, pad: 0 },
-  working: { hum: 0.6, brightness: 950, shimmer: 0.2, pad: 0 },
-  settled: { hum: 0.4, brightness: 650, shimmer: 0, pad: 0.32 },
+/** The room, how bright it sounds, and a deeper machinery layer that only runs while the team works. */
+const MOOD_LEVELS: Record<Mood, { room: number; brightness: number; machinery: number }> = {
+  waiting: { room: 0.6, brightness: 2600, machinery: 0 },
+  working: { room: 0.8, brightness: 4500, machinery: 0.45 },
+  settled: { room: 0.55, brightness: 2200, machinery: 0 },
 };
 
 export interface Synth {
   play(cue: Cue): void;
-  /** Starts the background hum on first use and eases it to the team's mood. */
+  /** Starts the room sound on first use and eases it to the team's mood. */
   setMood(mood: Mood): void;
   resume(): void;
   /** Lets the audio engine idle while muted; the next cue wakes it. */
@@ -69,44 +87,58 @@ export function createSynth(): Synth | null {
   master.gain.value = MASTER_GAIN;
   const tone = context.createBiquadFilter();
   tone.type = "lowpass";
-  tone.frequency.value = 3200;
+  tone.frequency.value = 5000;
   const limiter = context.createDynamicsCompressor();
   master.connect(tone).connect(limiter).connect(context.destination);
 
-  let ambient: ReturnType<typeof createAmbient> | null = null;
+  const air = noiseBuffer(context);
+  let ambient: Ambient | null = null;
+  let loading = false;
+  let mood: Mood = "waiting";
+
+  const easeTo = (target: Ambient, next: Mood) => {
+    const level = MOOD_LEVELS[next];
+    const now = context.currentTime;
+    target.room.gain.setTargetAtTime(level.room, now, MOOD_EASE / 3);
+    target.brightness.frequency.setTargetAtTime(level.brightness, now, MOOD_EASE / 3);
+    target.machinery.gain.setTargetAtTime(level.machinery, now, MOOD_EASE / 3);
+  };
 
   return {
     play(cue) {
       if (context.state === "suspended") void context.resume();
       const start = context.currentTime + 0.02;
-      for (const note of VOICES[cue]) {
-        const begin = start + note.at;
-        const end = begin + note.length;
-        const oscillator = context.createOscillator();
-        oscillator.type = note.wave;
-        oscillator.frequency.setValueAtTime(note.pitch, begin);
-        if (note.glideTo) oscillator.frequency.exponentialRampToValueAtTime(note.glideTo, end);
+      for (const voice of VOICES[cue]) {
+        const begin = start + voice.at;
+        const end = begin + voice.length;
         const envelope = context.createGain();
         envelope.gain.setValueAtTime(0.0001, begin);
-        envelope.gain.exponentialRampToValueAtTime(note.gain, begin + note.attack);
+        envelope.gain.exponentialRampToValueAtTime(voice.gain, begin + voice.attack);
         envelope.gain.exponentialRampToValueAtTime(0.0001, end);
-        oscillator.connect(envelope).connect(master);
-        oscillator.onended = () => {
-          oscillator.disconnect();
+        envelope.connect(master);
+        const source = voice.kind === "beep" ? beepSource(context, voice, begin, end) : hissSource(context, air, voice, begin, end);
+        source.output.connect(envelope);
+        source.node.onended = () => {
+          source.output.disconnect();
           envelope.disconnect();
         };
-        oscillator.start(begin);
-        oscillator.stop(end + 0.05);
+        source.node.start(begin);
+        source.node.stop(end + 0.05);
       }
     },
-    setMood(mood) {
-      ambient ??= createAmbient(context, limiter);
-      const level = MOOD_LEVELS[mood];
-      const now = context.currentTime;
-      ambient.hum.gain.setTargetAtTime(level.hum, now, MOOD_EASE / 3);
-      ambient.brightness.frequency.setTargetAtTime(level.brightness, now, MOOD_EASE / 3);
-      ambient.shimmer.gain.setTargetAtTime(level.shimmer, now, MOOD_EASE / 3);
-      ambient.pad.gain.setTargetAtTime(level.pad, now, MOOD_EASE / 3);
+    setMood(next) {
+      mood = next;
+      if (ambient) easeTo(ambient, next);
+      else if (!loading) {
+        loading = true;
+        void loadAmbient(context, limiter)
+          .then((loaded) => {
+            ambient = loaded;
+            if (loaded) easeTo(loaded, mood);
+          })
+          .catch(() => undefined)
+          .finally(() => (loading = false));
+      }
     },
     resume() {
       if (context.state === "suspended") void context.resume();
@@ -120,49 +152,75 @@ export function createSynth(): Synth | null {
   };
 }
 
-/** Endless soft oscillators; the mood only changes their levels, so nothing clicks or restarts. */
-function createAmbient(context: AudioContext, output: AudioNode) {
+function beepSource(context: AudioContext, voice: Beep, begin: number, end: number) {
+  const oscillator = context.createOscillator();
+  oscillator.type = voice.wave;
+  oscillator.frequency.setValueAtTime(voice.pitch, begin);
+  if (voice.glideTo) oscillator.frequency.exponentialRampToValueAtTime(voice.glideTo, end);
+  return { node: oscillator, output: oscillator as AudioNode };
+}
+
+function hissSource(context: AudioContext, air: AudioBuffer, voice: Hiss, begin: number, end: number) {
+  const source = context.createBufferSource();
+  source.buffer = air;
+  source.loop = true;
+  const band = context.createBiquadFilter();
+  band.type = "bandpass";
+  band.Q.value = 0.9;
+  band.frequency.setValueAtTime(voice.band, begin);
+  if (voice.bandTo) band.frequency.exponentialRampToValueAtTime(voice.bandTo, end);
+  source.connect(band);
+  return { node: source, output: band as AudioNode };
+}
+
+function noiseBuffer(context: AudioContext) {
+  const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const samples = buffer.getChannelData(0);
+  for (let i = 0; i < samples.length; i += 1) samples[i] = Math.random() * 2 - 1;
+  return buffer;
+}
+
+interface Ambient {
+  room: GainNode;
+  brightness: BiquadFilterNode;
+  machinery: GainNode;
+}
+
+/** The recorded room loops forever; a slowed, darker copy of it is the machinery that picks up while the team works. */
+async function loadAmbient(context: AudioContext, output: AudioNode): Promise<Ambient | null> {
+  const response = await fetch(DECK_AMBIENCE_URL);
+  if (!response.ok) return null;
+  const recording = await context.decodeAudioData(await response.arrayBuffer());
+  if (context.state === "closed") return null;
+
   const ambient = context.createGain();
   ambient.gain.value = AMBIENT_GAIN;
   ambient.connect(output);
 
-  const oscillator = (pitch: number, wave: OscillatorType, into: AudioNode) => {
-    const node = context.createOscillator();
-    node.type = wave;
-    node.frequency.value = pitch;
-    node.connect(into);
-    node.start();
-  };
-  /** A layer silent until its mood calls for it, swelling slowly by `breath` so it never drones flat. */
-  const layer = (breathRate: number, breath: number) => {
-    const level = context.createGain();
-    level.gain.value = 0;
-    level.connect(ambient);
-    const breathing = context.createGain();
-    breathing.connect(level);
-    const depth = context.createGain();
-    depth.gain.value = breath;
-    depth.connect(breathing.gain);
-    oscillator(breathRate, "sine", depth);
-    return { level, input: breathing };
+  const loop = (rate: number, offset: number, into: AudioNode) => {
+    const source = context.createBufferSource();
+    source.buffer = recording;
+    source.loop = true;
+    source.playbackRate.value = rate;
+    source.connect(into);
+    source.start(0, offset);
   };
 
-  const hum = layer(0.07, 0.2);
+  const room = context.createGain();
+  room.gain.value = 0;
   const brightness = context.createBiquadFilter();
   brightness.type = "lowpass";
   brightness.frequency.value = MOOD_LEVELS.waiting.brightness;
-  brightness.Q.value = 0.7;
-  brightness.connect(hum.input);
-  oscillator(D3, "triangle", brightness);
-  oscillator(A3, "sine", brightness);
-  oscillator(A3 * 1.003, "sine", brightness);
+  brightness.connect(room).connect(ambient);
+  loop(1, 0, brightness);
 
-  const shimmer = layer(0.3, 0.5);
-  oscillator(FS4, "sine", shimmer.input);
-  oscillator(A4 * 1.002, "sine", shimmer.input);
+  const machinery = context.createGain();
+  machinery.gain.value = 0;
+  const rumble = context.createBiquadFilter();
+  rumble.type = "lowpass";
+  rumble.frequency.value = 520;
+  rumble.connect(machinery).connect(ambient);
+  loop(0.62, recording.duration / 2, rumble);
 
-  const pad = layer(0.05, 0.15);
-  for (const pitch of [D4, FS4, A4]) oscillator(pitch, "sine", pad.input);
-
-  return { hum: hum.level, brightness, shimmer: shimmer.level, pad: pad.level };
+  return { room, brightness, machinery };
 }
