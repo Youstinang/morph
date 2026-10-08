@@ -26,7 +26,6 @@ Every movement on screen matches real work: an agent walks to a station because 
 There are two modes:
 
 - **Live:** real questions answered by an OpenAI model, with web search. It needs an API key.
-- **Sample scenario** (`/demo`): scripted, not live AI. It runs fully offline, with no key, internet or database.
 
 ## Design principles
 
